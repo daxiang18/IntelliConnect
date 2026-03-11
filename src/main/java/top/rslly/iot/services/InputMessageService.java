@@ -24,4 +24,8 @@ import top.rslly.iot.utility.result.JsonResult;
 
 public interface InputMessageService {
   JsonResult<?> createMessage(InputMessageCreateParam inputMessageCreateParam, String token);
+
+  JsonResult<?> getMessageByDedupeKey(String dedupeKey, String token);
+
+  JsonResult<?> getMessagesBySessionId(String sessionId, String token);
 }

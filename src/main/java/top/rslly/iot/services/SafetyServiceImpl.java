@@ -372,7 +372,9 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeProductVoiceDiy(String token, int id) {
-    checkServiceNotNull(productVoiceDiyService, "ProductVoiceDiyService");
+    if (!checkServiceNotNull(productVoiceDiyService, "ProductVoiceDiyService")) {
+      return false;
+    }
     List<ProductVoiceDiyEntity> productVoiceDiyEntityList =
         productVoiceDiyService.findAllById(id);
     if (productVoiceDiyEntityList.isEmpty())
@@ -383,11 +385,21 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeAgentMemory(String token, int id) {
-    checkServiceNotNull(agentMemoryService, "AgentMemoryService");
-    checkServiceNotNull(wxUserService, "WxUserService");
-    checkServiceNotNull(wxProductBindService, "WxProductBindService");
-    checkServiceNotNull(userService, "UserService");
-    checkServiceNotNull(userProductBindService, "UserProductBindService");
+    if (!checkServiceNotNull(agentMemoryService, "AgentMemoryService")) {
+      return false;
+    }
+    if (!checkServiceNotNull(wxUserService, "WxUserService")) {
+      return false;
+    }
+    if (!checkServiceNotNull(wxProductBindService, "WxProductBindService")) {
+      return false;
+    }
+    if (!checkServiceNotNull(userService, "UserService")) {
+      return false;
+    }
+    if (!checkServiceNotNull(userProductBindService, "UserProductBindService")) {
+      return false;
+    }
     String token_deal = token.replace(JwtTokenUtil.TOKEN_PREFIX, "");
     String role = JwtTokenUtil.getUserRole(token_deal);
     String username = JwtTokenUtil.getUsername(token_deal);

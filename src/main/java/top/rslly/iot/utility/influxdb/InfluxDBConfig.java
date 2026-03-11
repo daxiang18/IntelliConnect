@@ -19,6 +19,7 @@
  */
 package top.rslly.iot.utility.influxdb;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.EnvironmentAware;
 import org.springframework.context.annotation.Bean;
@@ -27,6 +28,7 @@ import org.springframework.core.env.Environment;
 import org.springframework.core.io.support.ResourcePatternResolver;
 
 @Configuration
+@ConditionalOnProperty(name = "iot.require-influx", havingValue = "true", matchIfMissing = true)
 public class InfluxDBConfig implements EnvironmentAware {
   private Environment env;
 

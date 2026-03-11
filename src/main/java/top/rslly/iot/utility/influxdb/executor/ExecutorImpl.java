@@ -37,6 +37,7 @@ import org.nutz.lang.Lang;
 import org.springframework.beans.BeanWrapperImpl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Component;
 import top.rslly.iot.utility.influxdb.InfluxProperty;
@@ -55,6 +56,7 @@ import java.util.Map;
 
 @Slf4j
 @Component
+@ConditionalOnProperty(name = "iot.require-influx", havingValue = "true", matchIfMissing = true)
 public class ExecutorImpl implements Executor {
 
   private InfluxDB influxDB;

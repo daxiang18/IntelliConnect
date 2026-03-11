@@ -55,7 +55,7 @@ const SubMenu = {
 <script setup>
 import { useStore } from 'vuex'
 import { useRouter, useRoute } from 'vue-router'
-import { ref } from '@vue/reactivity'
+import { ref, computed } from 'vue'
 import { watch } from '@vue/runtime-core'
 defineProps({
   collapsed: Boolean,
@@ -63,7 +63,9 @@ defineProps({
 const store = useStore()
 const router = useRouter()
 const route = useRoute()
-const menuList = store.state.auth.menuList
+
+// Use computed so menuList reacts to domain-filtered route changes
+const menuList = computed(() => store.state.auth.menuList)
 
 let selectedKeys = ref([])
 watch(

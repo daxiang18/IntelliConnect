@@ -56,7 +56,7 @@
   import { message } from 'ant-design-vue'
   import { getproductModel } from '@/api/productModel';
   import { getProductName } from '@/api/product';
-  import { getProductEvent } from '@/api/ProductEvent'; // 引入获取事件列表的API
+  import { getProductEvent } from '@/api/productEvent';
   import { useRouter } from 'vue-router';
 
   const router = useRouter();

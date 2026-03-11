@@ -57,6 +57,7 @@ const permission = {
 }
 const product ={
   productPage: '产品页面',
+  hubPage: '智能中枢',
   productXiaoZhi:'小智绑定',
   productRole:'角色设置',
   agentMemory:'记忆体设置',

@@ -49,7 +49,8 @@ const chart = {
   mapChart: 'Echarts Map',
 }
 const product ={
-  productPage: 'productPage',
+  productPage: 'IoT Products',
+  hubPage: 'Smart Hub',
   productXiaoZhi:'productXiaoZhi',
   productRole:'productRole',
   agentMemory:'agentMemory',

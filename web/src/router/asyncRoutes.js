@@ -1,17 +1,18 @@
-import moniter from './modules/moniter'
+import hub from './modules/hub'
+import iot from './modules/iot'
 import nestMenu from './modules/nestMenu'
 import permission from './modules/permission'
-import product from './modules/product'
+
 export const asyncRoutes = [
   {
     path: '/dashboard',
     name: 'Dashboard',
     component: () => import('@/views/dashboard/index.vue'),
     meta: {
-      title: 'dashboard', // 名称
-      auth: ['[ROLE_admin]', '[ROLE_guest]'], // 权限
+      title: 'dashboard',
+      auth: ['[ROLE_admin]', '[ROLE_guest]'],
       icon: 'DashboardOutlined',
-      // noHidden: true,  // 是否隐藏
+      domain: 'shared',
     },
   },
   {
@@ -23,11 +24,12 @@ export const asyncRoutes = [
       auth: ['[ROLE_admin]', '[ROLE_guest]'],
       icon: 'SettingOutlined',
       isHidden: true,
+      domain: 'shared',
     },
   },
   //...nestMenu,
-  ...product,
-  ...moniter,
+  ...hub,
+  ...iot,
   ...permission,
   {
     path: '/about',
@@ -36,6 +38,7 @@ export const asyncRoutes = [
     meta: {
       auth: ['[ROLE_admin]', '[ROLE_guest]'],
       title: 'about',
+      domain: 'shared',
     },
   },
 ]

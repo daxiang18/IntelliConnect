@@ -220,12 +220,14 @@ const rememberMe = ref(false)
 
 const handleSubmit = (values) => {
   loginIn(values)
-    .then((res) => {
+    .then(async (res) => {
       const { data, errorCode } = res.data
       console.log('auth', data)
       if (errorCode == 200) {
-        store.commit('auth/GENERATE_ROUTES', data)
         store.commit('auth/SET_AUTH', data)
+        await store.dispatch('domain/fetchDomainConfig')
+        const domainState = store.state.domain
+        store.commit('auth/GENERATE_ROUTES', { auth: data, domainState })
         console.log("__________________****")
         console.log(store.getters['auth/token'])
         router.push('/dashboard')

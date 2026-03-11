@@ -19,6 +19,7 @@
  */
 package top.rslly.iot.services.storage;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import top.rslly.iot.dao.EventStorageRepository;
@@ -41,13 +42,21 @@ public class EventStorageServiceImpl implements EventStorageService {
   private EventStorageRepository eventStorageRepository;
   @Resource
   private ProductDeviceRepository deviceRepository;
-  @Resource
+  @Autowired(required = false)
   private EventStorageTimeRepository eventStorageTimeRepository;
+
+  private EventStorageTimeRepository influxRepository() {
+    if (eventStorageTimeRepository == null) {
+      throw new IllegalStateException(
+          "EventStorageTimeRepository is required when storage.database=influxdb");
+    }
+    return eventStorageTimeRepository;
+  }
 
   @Override
   public void insert(EventStorageEntity eventStorageEntity) {
     if (database.equals("influxdb")) {
-      eventStorageTimeRepository.insert(eventStorageEntity);
+      influxRepository().insert(eventStorageEntity);
     } else
       eventStorageRepository.save(eventStorageEntity);
   }
@@ -62,7 +71,7 @@ public class EventStorageServiceImpl implements EventStorageService {
     int deviceId = productDeviceEntities.get(0).getId();
     List<EventStorageEntity> res;
     if (database.equals("influxdb")) {
-      res = eventStorageTimeRepository.findAllByTimeBetweenAndDeviceIdAndJsonKey(time, time2,
+      res = influxRepository().findAllByTimeBetweenAndDeviceIdAndJsonKey(time, time2,
           deviceId, jsonKey);
     } else {
       res = eventStorageRepository.findAllByTimeBetweenAndDeviceIdAndJsonKey(time, time2, deviceId,
@@ -77,7 +86,7 @@ public class EventStorageServiceImpl implements EventStorageService {
   public List<EventStorageEntity> findAllByTimeBetweenAndDeviceIdAndJsonKey(long time, long time2,
       int deviceId, String jsonKey) {
     if (database.equals("influxdb")) {
-      return eventStorageTimeRepository.findAllByTimeBetweenAndDeviceIdAndJsonKey(time, time2,
+      return influxRepository().findAllByTimeBetweenAndDeviceIdAndJsonKey(time, time2,
           deviceId,
           jsonKey);
     } else
@@ -88,8 +97,8 @@ public class EventStorageServiceImpl implements EventStorageService {
   @Override
   public void deleteAllByDeviceId(int deviceId) {
     if (database.equals("influxdb")) {
-      if (!eventStorageTimeRepository.findAllByDeviceId(deviceId).isEmpty())
-        eventStorageTimeRepository.deleteByDeviceId(deviceId);
+      if (!influxRepository().findAllByDeviceId(deviceId).isEmpty())
+        influxRepository().deleteByDeviceId(deviceId);
     } else if (!eventStorageRepository.findAllByDeviceId(deviceId).isEmpty())
       eventStorageRepository.deleteByDeviceId(deviceId);
   }
@@ -98,8 +107,8 @@ public class EventStorageServiceImpl implements EventStorageService {
   public void deleteAllByDeviceIdAndJsonKey(int deviceId, String jsonKey) {
 
     if (database.equals("influxdb")) {
-      if (!eventStorageTimeRepository.findAllByDeviceIdAndJsonKey(deviceId, jsonKey).isEmpty())
-        eventStorageTimeRepository.deleteAllByDeviceIdAndJsonKey(deviceId, jsonKey);
+      if (!influxRepository().findAllByDeviceIdAndJsonKey(deviceId, jsonKey).isEmpty())
+        influxRepository().deleteAllByDeviceIdAndJsonKey(deviceId, jsonKey);
     } else if (!eventStorageRepository.findAllByDeviceIdAndJsonKey(deviceId, jsonKey).isEmpty())
       eventStorageRepository.deleteAllByDeviceIdAndJsonKey(deviceId, jsonKey);
   }
@@ -108,7 +117,7 @@ public class EventStorageServiceImpl implements EventStorageService {
   @Override
   public void deleteAllByTimeBeforeAndDeviceIdAndJsonKey(long time, int deviceId, String jsonKey) {
     if (database.equals("influxdb")) {
-      eventStorageTimeRepository.deleteAllByTimeBeforeAndDeviceIdAndJsonKey(time, deviceId,
+      influxRepository().deleteAllByTimeBeforeAndDeviceIdAndJsonKey(time, deviceId,
           jsonKey);
     } else
       eventStorageRepository.deleteAllByTimeBeforeAndDeviceIdAndJsonKey(time, deviceId, jsonKey);

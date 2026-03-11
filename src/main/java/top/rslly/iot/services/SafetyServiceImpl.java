@@ -214,7 +214,9 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeProductData(String token, int productDataId) {
-    checkServiceNotNull(productDataService, "ProductDataService");
+    if (!checkServiceNotNull(productDataService, "ProductDataService")) {
+      return false;
+    }
     List<ProductDataEntity> productDataEntityList = productDataService.findAllById(productDataId);
     if (productDataEntityList.isEmpty())
       throw new IllegalArgumentException("productDataId not found!");
@@ -224,7 +226,9 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeProductRole(String token, int productRoleId) {
-    checkServiceNotNull(productRoleService, "ProductRoleService");
+    if (!checkServiceNotNull(productRoleService, "ProductRoleService")) {
+      return false;
+    }
     List<ProductRoleEntity> productRoleEntityList = productRoleService.findAllById(productRoleId);
     if (productRoleEntityList.isEmpty())
       throw new IllegalArgumentException("productRoleId not found!");
@@ -234,7 +238,9 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeMcpServer(String token, int mcpServerId) {
-    checkServiceNotNull(mcpServerService, "McpServerService");
+    if (!checkServiceNotNull(mcpServerService, "McpServerService")) {
+      return false;
+    }
     List<McpServerEntity> mcpServerEntityList = mcpServerService.findALLById(mcpServerId);
     if (mcpServerEntityList.isEmpty())
       throw new IllegalArgumentException("mcpServerId not found!");
@@ -244,7 +250,9 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeOta(String token, int id) {
-    checkServiceNotNull(otaService, "OtaService");
+    if (!checkServiceNotNull(otaService, "OtaService")) {
+      return false;
+    }
     List<OtaEntity> otaEntityList = otaService.findAllById(id);
     if (otaEntityList.isEmpty())
       throw new IllegalArgumentException("otaId not found!");

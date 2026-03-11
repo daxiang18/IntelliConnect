@@ -118,15 +118,19 @@ public class SafetyServiceImpl implements SafetyService {
   @Nullable
   private ProductSkillsServiceImpl productSkillsService;
 
-  private void checkServiceNotNull(Object service, String serviceName) {
+  private boolean checkServiceNotNull(Object service, String serviceName) {
     if (service == null) {
-      throw new IllegalStateException(serviceName + " is not available. Please check your configuration.");
+      log.warn("{} is not available. IoT domain may be disabled.", serviceName);
+      return false;
     }
+    return true;
   }
 
   @Override
   public boolean controlAuthorizeModel(String token, int modelId) {
-    checkServiceNotNull(productModelService, "ProductModelService");
+    if (!checkServiceNotNull(productModelService, "ProductModelService")) {
+      return false;
+    }
     List<ProductModelEntity> productModelEntityList = productModelService.findAllById(modelId);
     if (productModelEntityList.isEmpty())
       throw new IllegalArgumentException("modelId not found!");
@@ -136,7 +140,9 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeDevice(String token, int deviceId) {
-    checkServiceNotNull(productDeviceService, "ProductDeviceService");
+    if (!checkServiceNotNull(productDeviceService, "ProductDeviceService")) {
+      return false;
+    }
     List<ProductDeviceEntity> productDeviceEntityList = productDeviceService.findAllById(deviceId);
     if (productDeviceEntityList.isEmpty())
       throw new IllegalArgumentException("deviceId not found!");
@@ -146,7 +152,9 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeDevice(String token, String deviceName) {
-    checkServiceNotNull(productDeviceService, "ProductDeviceService");
+    if (!checkServiceNotNull(productDeviceService, "ProductDeviceService")) {
+      return false;
+    }
     List<ProductDeviceEntity> productDeviceEntityList =
         productDeviceService.findAllByName(deviceName);
     if (productDeviceEntityList.isEmpty())
@@ -157,7 +165,9 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeFunction(String token, int functionId) {
-    checkServiceNotNull(productFunctionService, "ProductFunctionService");
+    if (!checkServiceNotNull(productFunctionService, "ProductFunctionService")) {
+      return false;
+    }
     List<ProductFunctionEntity> productFunctionEntityList =
         productFunctionService.findAllById(functionId);
     if (productFunctionEntityList.isEmpty())
@@ -168,7 +178,9 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeEvent(String token, int eventId) {
-    checkServiceNotNull(productEventService, "ProductEventService");
+    if (!checkServiceNotNull(productEventService, "ProductEventService")) {
+      return false;
+    }
     List<ProductEventEntity> productEventEntityList = productEventService.findAllById(eventId);
     if (productEventEntityList.isEmpty())
       throw new IllegalArgumentException("eventId not found!");
@@ -178,7 +190,9 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeAlarmEvent(String token, int alarmEventId) {
-    checkServiceNotNull(alarmEventService, "AlarmEventService");
+    if (!checkServiceNotNull(alarmEventService, "AlarmEventService")) {
+      return false;
+    }
     List<AlarmEventEntity> alarmEventEntityList = alarmEventService.findAllById(alarmEventId);
     if (alarmEventEntityList.isEmpty())
       throw new IllegalArgumentException("alarmEventId not found!");
@@ -188,7 +202,9 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeEventData(String token, int eventDataId) {
-    checkServiceNotNull(eventDataService, "EventDataService");
+    if (!checkServiceNotNull(eventDataService, "EventDataService")) {
+      return false;
+    }
     List<EventDataEntity> eventDataEntityList = eventDataService.findAllById(eventDataId);
     if (eventDataEntityList.isEmpty())
       throw new IllegalArgumentException("eventDataId not found!");

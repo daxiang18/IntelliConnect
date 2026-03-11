@@ -24,6 +24,7 @@ import com.alibaba.fastjson.JSON;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import top.rslly.iot.config.WebSocketConfig;
 import top.rslly.iot.services.SafetyServiceImpl;
@@ -48,6 +49,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @ServerEndpoint(value = "/xiaozhi/v1/{chatId}", configurator = WebSocketConfig.class)
 @Component
 @Slf4j
+@ConditionalOnProperty(name = "iot.enabled", havingValue = "true", matchIfMissing = true)
 public class XiaoZhiWebsocket {
   public static final Map<String, Session> clients = new ConcurrentHashMap<>();
   public static final Map<String, String> voiceContent = new ConcurrentHashMap<>();

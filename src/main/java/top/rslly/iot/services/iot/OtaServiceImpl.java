@@ -24,6 +24,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -50,6 +51,7 @@ import java.util.*;
 
 @Service
 @Slf4j
+@ConditionalOnProperty(name = "iot.require-ota", havingValue = "true", matchIfMissing = true)
 public class OtaServiceImpl implements OtaService {
   @Resource
   private WxProductBindRepository wxProductBindRepository;

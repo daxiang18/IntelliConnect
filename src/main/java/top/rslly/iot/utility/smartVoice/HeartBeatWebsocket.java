@@ -20,6 +20,7 @@
 package top.rslly.iot.utility.smartVoice;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -29,6 +30,7 @@ import java.nio.ByteBuffer;
 
 @Component
 @Slf4j
+@ConditionalOnProperty(name = "iot.enabled", havingValue = "true", matchIfMissing = true)
 public class HeartBeatWebsocket {
   @Scheduled(initialDelay = 1000, fixedDelay = 1000 * 5)
   public void task() {

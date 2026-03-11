@@ -24,6 +24,7 @@ import io.grpc.stub.StreamObserver;
 import lombok.extern.slf4j.Slf4j;
 import net.devh.boot.grpc.server.service.GrpcService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import top.rslly.iot.services.thingsModel.ProductDeviceServiceImpl;
 import top.rslly.iot.utility.EmqTransfer;
 import top.rslly.iot.utility.exhook.*;
@@ -34,6 +35,7 @@ import java.util.Arrays;
 
 @GrpcService
 @Slf4j
+@ConditionalOnProperty(name = "iot.enabled", havingValue = "true", matchIfMissing = true)
 public class HookProviderImpl extends HookProviderGrpc.HookProviderImplBase {
 
   @Autowired

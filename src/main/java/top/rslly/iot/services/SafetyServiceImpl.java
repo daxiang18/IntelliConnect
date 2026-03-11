@@ -262,7 +262,9 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeOtaXiaoZhi(String token, int id) {
-    checkServiceNotNull(otaXiaozhiService, "OtaXiaozhiService");
+    if (!checkServiceNotNull(otaXiaozhiService, "OtaXiaozhiService")) {
+      return false;
+    }
     List<OtaXiaozhiEntity> otaXiaozhiEntityList = otaXiaozhiService.findAllById(id);
     if (otaXiaozhiEntityList.isEmpty())
       throw new IllegalArgumentException("otaXiaozhiId not found!");
@@ -272,9 +274,15 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeOta(String token, String name, String deviceName) {
-    checkServiceNotNull(productDeviceService, "ProductDeviceService");
-    checkServiceNotNull(productModelService, "ProductModelService");
-    checkServiceNotNull(otaService, "OtaService");
+    if (!checkServiceNotNull(productDeviceService, "ProductDeviceService")) {
+      return false;
+    }
+    if (!checkServiceNotNull(productModelService, "ProductModelService")) {
+      return false;
+    }
+    if (!checkServiceNotNull(otaService, "OtaService")) {
+      return false;
+    }
     var productDeviceEntityList = productDeviceService.findAllByName(deviceName);
     if (productDeviceEntityList.isEmpty())
       throw new IllegalArgumentException("deviceName not found!");
@@ -288,7 +296,9 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeXiaoZhiOtaPassive(String token, int id) {
-    checkServiceNotNull(otaXiaozhiPassiveService, "OtaXiaozhiPassiveService");
+    if (!checkServiceNotNull(otaXiaozhiPassiveService, "OtaXiaozhiPassiveService")) {
+      return false;
+    }
     List<OtaXiaozhiPassiveEntity> otaXiaozhiPassiveEntityList =
         otaXiaozhiPassiveService.findAllById(id);
     if (otaXiaozhiPassiveEntityList.isEmpty())

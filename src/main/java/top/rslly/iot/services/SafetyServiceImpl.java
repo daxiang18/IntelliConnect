@@ -444,7 +444,9 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeAgentMemory(String token, String chatId) {
-    checkServiceNotNull(agentMemoryService, "AgentMemoryService");
+    if (!checkServiceNotNull(agentMemoryService, "AgentMemoryService")) {
+      return false;
+    }
     List<AgentMemoryEntity> agentMemoryEntityList = agentMemoryService.findAllByChatId(chatId);
     if (agentMemoryEntityList.isEmpty())
       throw new IllegalArgumentException("chatId not found!");
@@ -454,7 +456,9 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeLlmProviderInformation(String token, int id) {
-    checkServiceNotNull(llmProviderInformationService, "LlmProviderInformationService");
+    if (!checkServiceNotNull(llmProviderInformationService, "LlmProviderInformationService")) {
+      return false;
+    }
     String token_deal = token.replace(JwtTokenUtil.TOKEN_PREFIX, "");
     String role = JwtTokenUtil.getUserRole(token_deal);
     String username = JwtTokenUtil.getUsername(token_deal);

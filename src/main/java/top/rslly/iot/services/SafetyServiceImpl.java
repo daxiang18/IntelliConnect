@@ -309,7 +309,9 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeOtaPassive(String token, int id) {
-    checkServiceNotNull(otaPassiveService, "OtaPassiveService");
+    if (!checkServiceNotNull(otaPassiveService, "OtaPassiveService")) {
+      return false;
+    }
     List<OtaPassiveEntity> otaPassiveEntityList = otaPassiveService.findAllById(id);
     if (otaPassiveEntityList.isEmpty())
       throw new IllegalArgumentException("otaPassiveId not found!");
@@ -319,7 +321,9 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeKnowledgeChat(String token, int id) {
-    checkServiceNotNull(knowledgeChatService, "KnowledgeChatService");
+    if (!checkServiceNotNull(knowledgeChatService, "KnowledgeChatService")) {
+      return false;
+    }
     List<KnowledgeChatEntity> knowledgeChatEntityList = knowledgeChatService.findAllById(id);
     if (knowledgeChatEntityList.isEmpty())
       throw new IllegalArgumentException("knowledgeChatId not found!");
@@ -329,7 +333,9 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeKnowledgeGraphicNode(String token, int id) {
-    checkServiceNotNull(knowledgeGraphicService, "KnowledgeGraphicService");
+    if (!checkServiceNotNull(knowledgeGraphicService, "KnowledgeGraphicService")) {
+      return false;
+    }
     List<KnowledgeGraphicNodeEntity> knowledgeGraphicNodeEntities =
         knowledgeGraphicService.getNodesById(id);
     if (knowledgeGraphicNodeEntities.isEmpty())
@@ -340,7 +346,9 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeProductRouterSet(String token, int id) {
-    checkServiceNotNull(productRouterSetService, "ProductRouterSetService");
+    if (!checkServiceNotNull(productRouterSetService, "ProductRouterSetService")) {
+      return false;
+    }
     List<ProductRouterSetEntity> productRouterSetEntityList =
         productRouterSetService.findAllById(id);
     if (productRouterSetEntityList.isEmpty())
@@ -351,7 +359,9 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeAgentLongMemory(String token, int id) {
-    checkServiceNotNull(agentLongMemoryService, "AgentLongMemoryService");
+    if (!checkServiceNotNull(agentLongMemoryService, "AgentLongMemoryService")) {
+      return false;
+    }
     List<AgentLongMemoryEntity> agentLongMemoryEntityList =
         agentLongMemoryService.findAllById(id);
     if (agentLongMemoryEntityList.isEmpty())

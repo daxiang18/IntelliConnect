@@ -23,6 +23,7 @@ import com.alibaba.fastjson.JSONObject;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import top.rslly.iot.dao.ProductDataRepository;
@@ -49,6 +50,7 @@ import java.util.Map;
 
 @Service
 @Slf4j
+@ConditionalOnProperty(name = "iot.enabled", havingValue = "true", matchIfMissing = true)
 public class HardWareServiceImpl implements HardWareService {
   @Resource
   private ProductDataRepository productDataRepository;

@@ -26,6 +26,7 @@ import com.alibaba.fastjson.serializer.SerializerFeature;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -55,6 +56,7 @@ import java.util.Map;
 
 @Service
 @Slf4j
+@ConditionalOnProperty(name = "iot.require-ota", havingValue = "true", matchIfMissing = true)
 public class OtaXiaozhiServiceImpl implements OtaXiaozhiService {
   @Resource
   private OtaXiaozhiRepository otaXiaozhiRepository;

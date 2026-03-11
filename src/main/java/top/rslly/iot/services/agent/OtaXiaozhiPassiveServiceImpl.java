@@ -21,6 +21,7 @@ package top.rslly.iot.services.agent;
 
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import top.rslly.iot.dao.*;
@@ -39,6 +40,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Service
+@ConditionalOnProperty(name = "iot.require-ota", havingValue = "true", matchIfMissing = true)
 public class OtaXiaozhiPassiveServiceImpl implements OtaXiaozhiPassiveService {
   @Resource
   private WxProductBindRepository wxProductBindRepository;

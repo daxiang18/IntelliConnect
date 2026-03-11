@@ -21,6 +21,7 @@ package top.rslly.iot.controllers;
 
 import io.swagger.v3.oas.annotations.Operation;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -48,6 +49,7 @@ import java.io.IOException;
 @RestController
 @RequestMapping(value = "/api/v2")
 @Validated
+@ConditionalOnProperty(name = "iot.enabled", havingValue = "true", matchIfMissing = true)
 public class IotTool {
   @Autowired
   private OtaServiceImpl otaService;

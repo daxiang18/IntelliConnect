@@ -22,6 +22,7 @@ package top.rslly.iot.controllers;
 import io.swagger.v3.oas.annotations.Operation;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import top.rslly.iot.param.request.*;
@@ -30,7 +31,6 @@ import top.rslly.iot.services.iot.HardWareServiceImpl;
 import top.rslly.iot.services.storage.DataServiceImpl;
 import top.rslly.iot.services.storage.EventStorageServiceImpl;
 import top.rslly.iot.services.thingsModel.ProductDeviceServiceImpl;
-import top.rslly.iot.utility.RuntimeMessage;
 import top.rslly.iot.utility.result.JsonResult;
 import top.rslly.iot.utility.result.ResultCode;
 import top.rslly.iot.utility.result.ResultTool;
@@ -38,11 +38,12 @@ import top.rslly.iot.utility.result.ResultTool;
 import jakarta.validation.Valid;
 
 /**
- * Hub domain controller for device management and status.
+ * IoT domain controller for device management and status.
  */
 @RestController
 @RequestMapping(value = "/api/v2")
 @Validated
+@ConditionalOnProperty(name = "iot.enabled", havingValue = "true", matchIfMissing = true)
 public class HubTool {
   @Autowired
   private DataServiceImpl dataService;
@@ -54,12 +55,6 @@ public class HubTool {
   private HardWareServiceImpl hardWareService;
   @Autowired
   private SafetyServiceImpl safetyService;
-
-  @Operation(summary = "用于获取平台运行环境信息", description = "单位为百分比")
-  @RequestMapping(value = "/machineMessage", method = RequestMethod.GET)
-  public JsonResult<?> machineMessage() {
-    return ResultTool.success(RuntimeMessage.getMessage());
-  }
 
   @Operation(summary = "用于获取连接的设备数量", description = "仅包含当前用户绑定的设备")
   @RequestMapping(value = "/getConnectedNum", method = RequestMethod.GET)

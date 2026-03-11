@@ -148,7 +148,7 @@ public class IotTool {
   @Operation(summary = "获取告警事件列表")
   @RequestMapping(value = "/alarmEvent", method = RequestMethod.GET)
   public JsonResult<?> alarmEventList(@RequestHeader("Authorization") String header) {
-    return alarmEventService.getAlarmEventList(header);
+    return alarmEventService.getAlarmEvent(header);
   }
 
   @Operation(summary = "新增告警事件")
@@ -156,12 +156,12 @@ public class IotTool {
   public JsonResult<?> alarmEventPost(@Valid @RequestBody AlarmEvent alarmEvent,
       @RequestHeader("Authorization") String header) {
     try {
-      if (!safetyService.controlAuthorizeProduct(header, alarmEvent.getProductId()))
+      if (!safetyService.controlAuthorizeModel(header, alarmEvent.getModelId()))
         return ResultTool.fail(ResultCode.NO_PERMISSION);
     } catch (Exception e) {
       return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
     }
-    return alarmEventService.addAlarmEvent(alarmEvent);
+    return alarmEventService.postAlarmEvent(alarmEvent);
   }
 
   @Operation(summary = "删除告警事件")
@@ -180,23 +180,20 @@ public class IotTool {
   @Operation(summary = "小智OTA管理列表")
   @RequestMapping(value = "/xiaozhi/otaManage", method = RequestMethod.GET)
   public JsonResult<?> xiaozhiOtaManageList(@RequestHeader("Authorization") String header) {
-    return otaXiaozhiService.getOtaXiaozhiList(header);
+    return otaXiaozhiService.otaList(header);
   }
 
   @Operation(summary = "小智OTA新增")
   @RequestMapping(value = "/xiaozhi/otaManage", method = RequestMethod.POST)
-  public JsonResult<?> xiaozhiOtaManagePost(@RequestParam("name") @NotBlank(message = "name 不能为空")
-  @Size(min = 1, max = 255, message = "name 长度必须在 1 到 255 之间") String name,
-      @RequestParam("productId") int productId,
-      @RequestPart("file") @NotNull(message = "file 不能为空") MultipartFile multipartFile,
+  public JsonResult<?> xiaozhiOtaManagePost(@Valid @RequestBody OtaXiaozhi otaXiaozhi,
       @RequestHeader("Authorization") String header) {
     try {
-      if (!safetyService.controlAuthorizeProduct(header, productId))
+      if (!safetyService.controlAuthorizeProduct(header, otaXiaozhi.getProductId()))
         return ResultTool.fail(ResultCode.NO_PERMISSION);
     } catch (Exception e) {
       return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
     }
-    return otaXiaozhiService.uploadOtaXiaozhi(name, productId, multipartFile);
+    return otaXiaozhiService.bindDevice(otaXiaozhi, header);
   }
 
   @Operation(summary = "小智OTA删除")
@@ -209,13 +206,14 @@ public class IotTool {
     } catch (Exception e) {
       return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
     }
-    return otaXiaozhiService.deleteOtaXiaozhi(id);
+    return otaXiaozhiService.unbound(id);
   }
 
   @Operation(summary = "小智OTA启用")
   @RequestMapping(value = "/xiaozhi/otaManage", method = RequestMethod.PUT)
   public JsonResult<?> xiaozhiOtaManagePut(@RequestParam("id") int id,
-      @RequestParam("deviceName") @NotBlank(message = "deviceName 不能为空") String deviceName,
+      @RequestParam("nickName") @NotBlank(message = "nickName 不能为空")
+      @Size(min = 1, max = 255, message = "nickName 长度必须在 1 到 255 之间") String nickName,
       @RequestHeader("Authorization") String header) {
     try {
       if (!safetyService.controlAuthorizeOtaXiaoZhi(header, id))
@@ -223,28 +221,13 @@ public class IotTool {
     } catch (Exception e) {
       return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
     }
-    return otaXiaozhiService.enableOtaXiaozhi(id, deviceName);
-  }
-
-  @Operation(summary = "视觉理解")
-  @RequestMapping(value = "/vision/explain", method = RequestMethod.POST)
-  public JsonResult<?> visionExplain(
-      @RequestParam("productId") int productId,
-      @RequestPart("file") @NotNull(message = "file 不能为空") MultipartFile multipartFile,
-      @RequestHeader("Authorization") String header) {
-    try {
-      if (!safetyService.controlAuthorizeProduct(header, productId))
-        return ResultTool.fail(ResultCode.NO_PERMISSION);
-    } catch (Exception e) {
-      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
-    }
-    return otaXiaozhiService.visionExplain(productId, multipartFile, header);
+    return otaXiaozhiService.otaUpdate(id, nickName);
   }
 
   @Operation(summary = "小智OTA被动升级列表")
   @RequestMapping(value = "/xiaozhi/otaPassive", method = RequestMethod.GET)
   public JsonResult<?> xiaozhiOtaPassiveList(@RequestHeader("Authorization") String header) {
-    return otaXiaozhiPassiveService.getOtaXiaozhiPassiveList(header);
+    return otaXiaozhiPassiveService.otaXiaozhiPassiveList(header);
   }
 
   @Operation(summary = "小智OTA被动升级新增")
@@ -257,7 +240,7 @@ public class IotTool {
     } catch (Exception e) {
       return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
     }
-    return otaXiaozhiPassiveService.addOtaXiaozhiPassive(otaXiaozhiPassive);
+    return otaXiaozhiPassiveService.otaXiaozhiPassivePost(otaXiaozhiPassive);
   }
 
   @Operation(summary = "小智OTA被动升级删除")
@@ -270,7 +253,7 @@ public class IotTool {
     } catch (Exception e) {
       return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
     }
-    return otaXiaozhiPassiveService.deleteOtaXiaozhiPassive(id);
+    return otaXiaozhiPassiveService.otaXiaozhiPassiveDelete(id);
   }
 
   @RequestMapping(value = "/micro/{name}", method = RequestMethod.GET)

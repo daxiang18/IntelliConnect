@@ -178,6 +178,7 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeAlarmEvent(String token, int alarmEventId) {
+    checkServiceNotNull(alarmEventService, "AlarmEventService");
     List<AlarmEventEntity> alarmEventEntityList = alarmEventService.findAllById(alarmEventId);
     if (alarmEventEntityList.isEmpty())
       throw new IllegalArgumentException("alarmEventId not found!");
@@ -187,6 +188,7 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeEventData(String token, int eventDataId) {
+    checkServiceNotNull(eventDataService, "EventDataService");
     List<EventDataEntity> eventDataEntityList = eventDataService.findAllById(eventDataId);
     if (eventDataEntityList.isEmpty())
       throw new IllegalArgumentException("eventDataId not found!");
@@ -196,6 +198,7 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeProductData(String token, int productDataId) {
+    checkServiceNotNull(productDataService, "ProductDataService");
     List<ProductDataEntity> productDataEntityList = productDataService.findAllById(productDataId);
     if (productDataEntityList.isEmpty())
       throw new IllegalArgumentException("productDataId not found!");
@@ -205,6 +208,7 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeProductRole(String token, int productRoleId) {
+    checkServiceNotNull(productRoleService, "ProductRoleService");
     List<ProductRoleEntity> productRoleEntityList = productRoleService.findAllById(productRoleId);
     if (productRoleEntityList.isEmpty())
       throw new IllegalArgumentException("productRoleId not found!");
@@ -214,6 +218,7 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeMcpServer(String token, int mcpServerId) {
+    checkServiceNotNull(mcpServerService, "McpServerService");
     List<McpServerEntity> mcpServerEntityList = mcpServerService.findALLById(mcpServerId);
     if (mcpServerEntityList.isEmpty())
       throw new IllegalArgumentException("mcpServerId not found!");
@@ -223,6 +228,7 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeOta(String token, int id) {
+    checkServiceNotNull(otaService, "OtaService");
     List<OtaEntity> otaEntityList = otaService.findAllById(id);
     if (otaEntityList.isEmpty())
       throw new IllegalArgumentException("otaId not found!");
@@ -232,6 +238,7 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeOtaXiaoZhi(String token, int id) {
+    checkServiceNotNull(otaXiaozhiService, "OtaXiaozhiService");
     List<OtaXiaozhiEntity> otaXiaozhiEntityList = otaXiaozhiService.findAllById(id);
     if (otaXiaozhiEntityList.isEmpty())
       throw new IllegalArgumentException("otaXiaozhiId not found!");
@@ -241,6 +248,9 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeOta(String token, String name, String deviceName) {
+    checkServiceNotNull(productDeviceService, "ProductDeviceService");
+    checkServiceNotNull(productModelService, "ProductModelService");
+    checkServiceNotNull(otaService, "OtaService");
     var productDeviceEntityList = productDeviceService.findAllByName(deviceName);
     if (productDeviceEntityList.isEmpty())
       throw new IllegalArgumentException("deviceName not found!");
@@ -254,6 +264,7 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeXiaoZhiOtaPassive(String token, int id) {
+    checkServiceNotNull(otaXiaozhiPassiveService, "OtaXiaozhiPassiveService");
     List<OtaXiaozhiPassiveEntity> otaXiaozhiPassiveEntityList =
         otaXiaozhiPassiveService.findAllById(id);
     if (otaXiaozhiPassiveEntityList.isEmpty())
@@ -264,6 +275,7 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeOtaPassive(String token, int id) {
+    checkServiceNotNull(otaPassiveService, "OtaPassiveService");
     List<OtaPassiveEntity> otaPassiveEntityList = otaPassiveService.findAllById(id);
     if (otaPassiveEntityList.isEmpty())
       throw new IllegalArgumentException("otaPassiveId not found!");
@@ -273,6 +285,7 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeKnowledgeChat(String token, int id) {
+    checkServiceNotNull(knowledgeChatService, "KnowledgeChatService");
     List<KnowledgeChatEntity> knowledgeChatEntityList = knowledgeChatService.findAllById(id);
     if (knowledgeChatEntityList.isEmpty())
       throw new IllegalArgumentException("knowledgeChatId not found!");
@@ -282,6 +295,7 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeKnowledgeGraphicNode(String token, int id) {
+    checkServiceNotNull(knowledgeGraphicService, "KnowledgeGraphicService");
     List<KnowledgeGraphicNodeEntity> knowledgeGraphicNodeEntities =
         knowledgeGraphicService.getNodesById(id);
     if (knowledgeGraphicNodeEntities.isEmpty())
@@ -292,6 +306,7 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeProductRouterSet(String token, int id) {
+    checkServiceNotNull(productRouterSetService, "ProductRouterSetService");
     List<ProductRouterSetEntity> productRouterSetEntityList =
         productRouterSetService.findAllById(id);
     if (productRouterSetEntityList.isEmpty())
@@ -302,6 +317,7 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeAgentLongMemory(String token, int id) {
+    checkServiceNotNull(agentLongMemoryService, "AgentLongMemoryService");
     List<AgentLongMemoryEntity> agentLongMemoryEntityList =
         agentLongMemoryService.findAllById(id);
     if (agentLongMemoryEntityList.isEmpty())
@@ -312,6 +328,7 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeProductVoiceDiy(String token, int id) {
+    checkServiceNotNull(productVoiceDiyService, "ProductVoiceDiyService");
     List<ProductVoiceDiyEntity> productVoiceDiyEntityList =
         productVoiceDiyService.findAllById(id);
     if (productVoiceDiyEntityList.isEmpty())
@@ -322,6 +339,11 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeAgentMemory(String token, int id) {
+    checkServiceNotNull(agentMemoryService, "AgentMemoryService");
+    checkServiceNotNull(wxUserService, "WxUserService");
+    checkServiceNotNull(wxProductBindService, "WxProductBindService");
+    checkServiceNotNull(userService, "UserService");
+    checkServiceNotNull(userProductBindService, "UserProductBindService");
     String token_deal = token.replace(JwtTokenUtil.TOKEN_PREFIX, "");
     String role = JwtTokenUtil.getUserRole(token_deal);
     String username = JwtTokenUtil.getUsername(token_deal);
@@ -366,6 +388,7 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeAgentMemory(String token, String chatId) {
+    checkServiceNotNull(agentMemoryService, "AgentMemoryService");
     List<AgentMemoryEntity> agentMemoryEntityList = agentMemoryService.findAllByChatId(chatId);
     if (agentMemoryEntityList.isEmpty())
       throw new IllegalArgumentException("chatId not found!");
@@ -375,6 +398,7 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeLlmProviderInformation(String token, int id) {
+    checkServiceNotNull(llmProviderInformationService, "LlmProviderInformationService");
     String token_deal = token.replace(JwtTokenUtil.TOKEN_PREFIX, "");
     String role = JwtTokenUtil.getUserRole(token_deal);
     String username = JwtTokenUtil.getUsername(token_deal);
@@ -393,6 +417,7 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeProductLlmModel(String token, int id) {
+    checkServiceNotNull(productLlmModelService, "ProductLlmModelService");
     List<ProductLlmModelEntity> productLlmModelEntityList = productLlmModelService.findAllById(id);
     if (productLlmModelEntityList.isEmpty())
       throw new IllegalArgumentException("productLlmModelId not found!");
@@ -402,6 +427,7 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeProductSkills(String token, int productSkillsId) {
+    checkServiceNotNull(productSkillsService, "ProductSkillsService");
     List<ProductSkillsEntity> productSkillsEntityList =
         productSkillsService.findAllById(productSkillsId);
     if (productSkillsEntityList.isEmpty())
@@ -412,6 +438,10 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeProduct(String token, int productId) {
+    checkServiceNotNull(wxUserService, "WxUserService");
+    checkServiceNotNull(wxProductBindService, "WxProductBindService");
+    checkServiceNotNull(userService, "UserService");
+    checkServiceNotNull(userProductBindService, "UserProductBindService");
     String token_deal = token.replace(JwtTokenUtil.TOKEN_PREFIX, "");
     String role = JwtTokenUtil.getUserRole(token_deal);
     String username = JwtTokenUtil.getUsername(token_deal);

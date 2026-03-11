@@ -372,7 +372,9 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeProductVoiceDiy(String token, int id) {
-    checkServiceNotNull(productVoiceDiyService, "ProductVoiceDiyService");
+    if (!checkServiceNotNull(productVoiceDiyService, "ProductVoiceDiyService")) {
+      return false;
+    }
     List<ProductVoiceDiyEntity> productVoiceDiyEntityList =
         productVoiceDiyService.findAllById(id);
     if (productVoiceDiyEntityList.isEmpty())
@@ -383,11 +385,21 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeAgentMemory(String token, int id) {
-    checkServiceNotNull(agentMemoryService, "AgentMemoryService");
-    checkServiceNotNull(wxUserService, "WxUserService");
-    checkServiceNotNull(wxProductBindService, "WxProductBindService");
-    checkServiceNotNull(userService, "UserService");
-    checkServiceNotNull(userProductBindService, "UserProductBindService");
+    if (!checkServiceNotNull(agentMemoryService, "AgentMemoryService")) {
+      return false;
+    }
+    if (!checkServiceNotNull(wxUserService, "WxUserService")) {
+      return false;
+    }
+    if (!checkServiceNotNull(wxProductBindService, "WxProductBindService")) {
+      return false;
+    }
+    if (!checkServiceNotNull(userService, "UserService")) {
+      return false;
+    }
+    if (!checkServiceNotNull(userProductBindService, "UserProductBindService")) {
+      return false;
+    }
     String token_deal = token.replace(JwtTokenUtil.TOKEN_PREFIX, "");
     String role = JwtTokenUtil.getUserRole(token_deal);
     String username = JwtTokenUtil.getUsername(token_deal);
@@ -432,7 +444,9 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeAgentMemory(String token, String chatId) {
-    checkServiceNotNull(agentMemoryService, "AgentMemoryService");
+    if (!checkServiceNotNull(agentMemoryService, "AgentMemoryService")) {
+      return false;
+    }
     List<AgentMemoryEntity> agentMemoryEntityList = agentMemoryService.findAllByChatId(chatId);
     if (agentMemoryEntityList.isEmpty())
       throw new IllegalArgumentException("chatId not found!");
@@ -442,7 +456,9 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeLlmProviderInformation(String token, int id) {
-    checkServiceNotNull(llmProviderInformationService, "LlmProviderInformationService");
+    if (!checkServiceNotNull(llmProviderInformationService, "LlmProviderInformationService")) {
+      return false;
+    }
     String token_deal = token.replace(JwtTokenUtil.TOKEN_PREFIX, "");
     String role = JwtTokenUtil.getUserRole(token_deal);
     String username = JwtTokenUtil.getUsername(token_deal);
@@ -461,7 +477,9 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeProductLlmModel(String token, int id) {
-    checkServiceNotNull(productLlmModelService, "ProductLlmModelService");
+    if (!checkServiceNotNull(productLlmModelService, "ProductLlmModelService")) {
+      return false;
+    }
     List<ProductLlmModelEntity> productLlmModelEntityList = productLlmModelService.findAllById(id);
     if (productLlmModelEntityList.isEmpty())
       throw new IllegalArgumentException("productLlmModelId not found!");
@@ -471,7 +489,9 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeProductSkills(String token, int productSkillsId) {
-    checkServiceNotNull(productSkillsService, "ProductSkillsService");
+    if (!checkServiceNotNull(productSkillsService, "ProductSkillsService")) {
+      return false;
+    }
     List<ProductSkillsEntity> productSkillsEntityList =
         productSkillsService.findAllById(productSkillsId);
     if (productSkillsEntityList.isEmpty())
@@ -482,10 +502,18 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeProduct(String token, int productId) {
-    checkServiceNotNull(wxUserService, "WxUserService");
-    checkServiceNotNull(wxProductBindService, "WxProductBindService");
-    checkServiceNotNull(userService, "UserService");
-    checkServiceNotNull(userProductBindService, "UserProductBindService");
+    if (!checkServiceNotNull(wxUserService, "WxUserService")) {
+      return false;
+    }
+    if (!checkServiceNotNull(wxProductBindService, "WxProductBindService")) {
+      return false;
+    }
+    if (!checkServiceNotNull(userService, "UserService")) {
+      return false;
+    }
+    if (!checkServiceNotNull(userProductBindService, "UserProductBindService")) {
+      return false;
+    }
     String token_deal = token.replace(JwtTokenUtil.TOKEN_PREFIX, "");
     String role = JwtTokenUtil.getUserRole(token_deal);
     String username = JwtTokenUtil.getUsername(token_deal);

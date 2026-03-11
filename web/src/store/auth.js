@@ -9,14 +9,19 @@ const state = {
 }
 const getters = {
   token: () => {
-    // localStorage.setItem('access-token', state.auth)
     return state.auth
   },
 }
 const mutations = {
-  async GENERATE_ROUTES(state, auth) {
+  async GENERATE_ROUTES(state, { auth, domainState }) {
     const layout = constantRoutes.find((item) => item.path === '/')
-    const authRoutes = traversalRoutes(asyncRoutes, auth)
+    let authRoutes = traversalRoutes(asyncRoutes, auth)
+
+    // Filter by domain if domainState is provided
+    if (domainState) {
+      authRoutes = filterByDomain(authRoutes, domainState)
+    }
+
     layout.children = [...authRoutes]
     state.menuList = authRoutes
     state.auth = auth
@@ -55,4 +60,14 @@ function traversalRoutes(routes, auth) {
     }
   })
   return result
+}
+
+function filterByDomain(routes, domainState) {
+  return routes.filter((r) => {
+    const domain = r.meta && r.meta.domain
+    if (!domain || domain === 'shared') return true
+    if (domain === 'hub') return domainState.hub && domainState.hub.enabled
+    if (domain === 'iot') return domainState.iot && domainState.iot.enabled
+    return true
+  })
 }

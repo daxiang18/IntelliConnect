@@ -14,7 +14,7 @@ import nProgress from '@/plugins/nProgress'
 import '@/assets/global.scss'
 import '@/assets/common.scss'
 
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   nProgress.start()
   const token = store.getters['auth/token']
   //console.log(token)
@@ -32,7 +32,10 @@ router.beforeEach((to, from, next) => {
       } else {
         //   生成路由再跳转
         const auth = token // 解析token 或者请求后台回去登陆角色
-        store.commit('auth/GENERATE_ROUTES', auth)
+        // Fetch domain config before generating routes
+        await store.dispatch('domain/fetchDomainConfig')
+        const domainState = store.state.domain
+        store.commit('auth/GENERATE_ROUTES', { auth, domainState })
         next({
           path: to.path,
           replace: true,

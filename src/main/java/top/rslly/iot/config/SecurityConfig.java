@@ -88,7 +88,8 @@ public class SecurityConfig {
         "/xiaozhi/ota/**",
         "/xiaozhi/ota/activate/**",
         "/mcp",
-        "/api/v2/machineStatus/**");
+        "/api/v2/machineStatus/**",
+        "/api/v2/domain-config");
   }
 
   /**

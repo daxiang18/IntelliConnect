@@ -53,6 +53,15 @@ import java.util.Arrays;
 @RestController
 @Slf4j
 @Validated
+/**
+ * 仅保留当前官方微信能力：
+ * 1. 微信登录
+ * 2. 微信与产品绑定
+ * 3. 官方微信消息回调
+ *
+ * 未来网页微信/QQ/飞书等侧车输入统一走 InputController，
+ * 不在这里扩展新的侧车协议适配逻辑。
+ */
 public class Wx {
 
   @Autowired
@@ -84,6 +93,10 @@ public class Wx {
     return wxProductBindService.wxUnBindProduct(wxBindProduct, header);
   }
 
+  /**
+   * 官方微信回调入口。仅处理当前已支持的公众号/小程序消息回调，
+   * 不作为未来侧车消息的统一接入点。
+   */
   @RequestMapping(value = "/wxmsg", method = {RequestMethod.GET, RequestMethod.POST})
   public void WxMsg(HttpServletRequest request, HttpServletResponse response) {
     dealMsg.WxMsg(request, response);

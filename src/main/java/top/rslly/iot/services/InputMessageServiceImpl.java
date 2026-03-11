@@ -41,13 +41,17 @@ public class InputMessageServiceImpl implements InputMessageService {
   @Resource
   private InputMessageRepository inputMessageRepository;
 
+  private String resolveUsername(String token) {
+    String tokenDeal = token.replace(JwtTokenUtil.TOKEN_PREFIX, "");
+    return JwtTokenUtil.getUsername(tokenDeal);
+  }
+
   @Override
   @Transactional(rollbackFor = Exception.class)
   public JsonResult<?> createMessage(InputMessageCreateParam inputMessageCreateParam, String token) {
     String username;
     try {
-      String tokenDeal = token.replace(JwtTokenUtil.TOKEN_PREFIX, "");
-      username = JwtTokenUtil.getUsername(tokenDeal);
+      username = resolveUsername(token);
     } catch (Exception e) {
       log.warn("create input message failed to parse token", e);
       return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
@@ -80,5 +84,35 @@ public class InputMessageServiceImpl implements InputMessageService {
     entity.setCreatedBy(username);
 
     return ResultTool.success(inputMessageRepository.save(entity));
+  }
+
+  @Override
+  public JsonResult<?> getMessageByDedupeKey(String dedupeKey, String token) {
+    try {
+      resolveUsername(token);
+    } catch (Exception e) {
+      log.warn("get input message by dedupe key failed to parse token", e);
+      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
+    }
+
+    var entity = inputMessageRepository.findFirstByDedupeKey(dedupeKey);
+    return entity.<JsonResult<?>>map(ResultTool::success)
+        .orElseGet(() -> ResultTool.fail(ResultCode.COMMON_FAIL));
+  }
+
+  @Override
+  public JsonResult<?> getMessagesBySessionId(String sessionId, String token) {
+    try {
+      resolveUsername(token);
+    } catch (Exception e) {
+      log.warn("get input messages by session failed to parse token", e);
+      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
+    }
+
+    var entities = inputMessageRepository.findAllBySessionIdOrderByReceivedAtDesc(sessionId);
+    if (entities.isEmpty()) {
+      return ResultTool.fail(ResultCode.COMMON_FAIL);
+    }
+    return ResultTool.success(entities);
   }
 }

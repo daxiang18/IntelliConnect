@@ -22,8 +22,11 @@ package top.rslly.iot.dao;
 import org.springframework.data.jpa.repository.JpaRepository;
 import top.rslly.iot.models.InputMessageEntity;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface InputMessageRepository extends JpaRepository<InputMessageEntity, Long> {
   Optional<InputMessageEntity> findFirstByDedupeKey(String dedupeKey);
+
+  List<InputMessageEntity> findAllBySessionIdOrderByReceivedAtDesc(String sessionId);
 }

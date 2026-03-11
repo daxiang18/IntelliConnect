@@ -22,6 +22,7 @@ package top.rslly.iot.controllers;
 import io.swagger.v3.oas.annotations.Operation;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -45,5 +46,19 @@ public class InputController {
   public JsonResult<?> createMessage(@Valid @RequestBody InputMessageCreateParam inputMessageCreateParam,
       @RequestHeader("Authorization") String header) {
     return inputMessageService.createMessage(inputMessageCreateParam, header);
+  }
+
+  @Operation(summary = "按去重键查询标准化输入消息", description = "用于最小闭环验证已入库消息是否可查询")
+  @RequestMapping(value = "/messages/by-dedupe", method = RequestMethod.GET)
+  public JsonResult<?> getMessageByDedupeKey(@RequestParam("dedupeKey") String dedupeKey,
+      @RequestHeader("Authorization") String header) {
+    return inputMessageService.getMessageByDedupeKey(dedupeKey, header);
+  }
+
+  @Operation(summary = "按会话查询标准化输入消息", description = "用于最小闭环验证同一会话消息列表")
+  @RequestMapping(value = "/messages/by-session", method = RequestMethod.GET)
+  public JsonResult<?> getMessagesBySessionId(@RequestParam("sessionId") String sessionId,
+      @RequestHeader("Authorization") String header) {
+    return inputMessageService.getMessagesBySessionId(sessionId, header);
   }
 }

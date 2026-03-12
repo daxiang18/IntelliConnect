@@ -25,6 +25,7 @@ import com.alibaba.fastjson.JSONObject;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import top.rslly.iot.models.ProductFunctionEntity;
 import top.rslly.iot.services.thingsModel.ProductDeviceServiceImpl;
@@ -36,6 +37,7 @@ import java.util.List;
 
 @Component
 @Slf4j
+@ConditionalOnProperty(name = "iot.enabled", havingValue = "true", matchIfMissing = true)
 public class DealThingsFunction {
 
   @Autowired

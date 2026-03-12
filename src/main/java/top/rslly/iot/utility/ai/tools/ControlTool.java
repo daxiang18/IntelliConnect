@@ -64,7 +64,7 @@ public class ControlTool implements BaseTool<String> {
   private ProductModelServiceImpl productModelService;
   @Autowired
   private ProductServiceImpl productService;
-  @Autowired
+  @Autowired(required = false)
   private HardWareServiceImpl hardWareService;
   @Autowired
   private LlmDiyUtility llmDiyUtility;
@@ -92,6 +92,8 @@ public class ControlTool implements BaseTool<String> {
   public String run(String question, Map<String, Object> globalMessage) {
     int productId = (int) globalMessage.get("productId");
 
+    if (hardWareService == null)
+      return "IoT硬件控制服务未启用，当前模式不支持设备控制";
     if (productService.findAllById(productId).isEmpty())
       return "产品设置错误，请检查相关设置！";
     if (productModelService.findAllByProductId(productId).isEmpty())

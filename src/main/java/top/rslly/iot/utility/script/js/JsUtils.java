@@ -31,7 +31,7 @@ import java.util.List;
 @Component
 public class JsUtils {
   private static JsUtils imp1;
-  @Autowired
+  @Autowired(required = false)
   private HardWareServiceImpl hardWareService;
 
   @PostConstruct
@@ -43,6 +43,8 @@ public class JsUtils {
   public static boolean control(String name, String mode, String functionName, String status,
       int qos, List<String> key,
       List<String> value) {
+    if (imp1 == null || imp1.hardWareService == null)
+      return false;
     ControlParam controlParam = new ControlParam(name, mode, functionName, status, qos, key, value);
     try {
       var res = imp1.hardWareService.control(controlParam).getErrorCode();

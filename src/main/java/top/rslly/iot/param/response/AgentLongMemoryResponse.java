@@ -17,24 +17,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package top.rslly.iot.services;
+package top.rslly.iot.param.response;
 
-import top.rslly.iot.param.request.InputMessageCreateParam;
-import top.rslly.iot.param.request.InputMessagePromoteParam;
-import top.rslly.iot.param.request.InputMessageRecallParam;
-import top.rslly.iot.utility.result.JsonResult;
+import lombok.Data;
 
-public interface InputMessageService {
-  JsonResult<?> createMessage(InputMessageCreateParam inputMessageCreateParam, String token);
-
-  JsonResult<?> getMessageByDedupeKey(String dedupeKey, String token);
-
-  JsonResult<?> getMessagesBySessionId(String sessionId, String token);
-
-  JsonResult<?> processMessage(long id, String token);
-
-  JsonResult<?> recallMessages(InputMessageRecallParam inputMessageRecallParam, String token);
-
-  JsonResult<?> promoteMessageToLongMemory(long id, InputMessagePromoteParam inputMessagePromoteParam,
-      String token);
+@Data
+public class AgentLongMemoryResponse {
+  private int id;
+  private int productId;
+  private String memoryKey;
+  private String description;
+  private String memoryValue;
 }

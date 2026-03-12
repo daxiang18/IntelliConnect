@@ -21,6 +21,7 @@ package top.rslly.iot.controllers;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
@@ -30,10 +31,10 @@ import top.rslly.iot.services.agent.OtaXiaozhiServiceImpl;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import java.util.Map;
 
 @RestController
 @Slf4j
+@ConditionalOnProperty(name = "iot.require-ota", havingValue = "true", matchIfMissing = true)
 public class XiaoZhi {
   @Autowired
   private OtaXiaozhiServiceImpl otaXiaozhiService;

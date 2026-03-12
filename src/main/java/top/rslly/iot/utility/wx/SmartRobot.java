@@ -26,6 +26,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import top.rslly.iot.models.AdminConfigEntity;
 import top.rslly.iot.services.AdminConfigServiceImpl;
+import top.rslly.iot.services.InputMessageServiceImpl;
 import top.rslly.iot.services.wechat.WxProductActiveServiceImpl;
 import top.rslly.iot.services.wechat.WxProductBindServiceImpl;
 import top.rslly.iot.services.wechat.WxUserServiceImpl;
@@ -67,12 +68,28 @@ public class SmartRobot {
   private String defaultWxUnregisteredMessage;
   @Autowired
   private AdminConfigServiceImpl adminConfigService;
+  @Autowired
+  private InputMessageServiceImpl inputMessageService;
 
   @Async("taskExecutor")
   public void smartSendContent(String openid, String msg, String microappid) throws IOException {
-    if (wxUserService.findAllByAppidAndOpenid(microappid, openid).isEmpty()) {
+    smartSendContent(openid, msg, microappid, null);
+  }
+
+  @Async("taskExecutor")
+  public void smartSendContent(String openid, String msg, String microappid, String externalMessageId)
+      throws IOException {
+    var wxUsers = wxUserService.findAllByAppidAndOpenid(microappid, openid);
+    if (wxUsers.isEmpty()) {
       dealWx.sendContent(openid, getWxUnregisteredMessage(), microappid);
       return;
+    }
+    var wxUser = wxUsers.get(0);
+    var bridgeResult = inputMessageService.bridgeWechatTextMessage(microappid, openid,
+        wxUser.getName(), msg, externalMessageId);
+    if (!bridgeResult.getSuccess()) {
+      log.warn("bridge wechat message to input failed, openid={}, appid={}, code={}", openid,
+          microappid, bridgeResult.getErrorCode());
     }
     var productActiveEntities = productActiveService.findAllByAppidAndOpenid(microappid, openid);
     int productId = 0;
@@ -106,9 +123,22 @@ public class SmartRobot {
   @Async("taskExecutor")
   public void smartImageSendContent(String openid, String imageUrl, String microappid)
       throws IOException {
-    if (wxUserService.findAllByAppidAndOpenid(microappid, openid).isEmpty()) {
-      dealWx.sendContent(openid, "该用户未注册，请先注册再使用", microappid);
+    smartImageSendContent(openid, imageUrl, microappid, null);
+  }
+
+  @Async("taskExecutor")
+  public void smartImageSendContent(String openid, String imageUrl, String microappid,
+      String externalMessageId) throws IOException {
+    var wxUsers = wxUserService.findAllByAppidAndOpenid(microappid, openid);
+    if (wxUsers.isEmpty()) {
+      dealWx.sendContent(openid, getWxUnregisteredMessage(), microappid);
       return;
+    }
+    var bridgeResult = inputMessageService.bridgeWechatImageMessage(microappid, openid,
+        wxUsers.get(0).getName(), imageUrl, externalMessageId);
+    if (!bridgeResult.getSuccess()) {
+      log.warn("bridge wechat image to input failed, openid={}, appid={}, code={}", openid,
+          microappid, bridgeResult.getErrorCode());
     }
     List<ModelMessage> memory;
     String content = LLMFactory.getLLM(smartRobotLLm).imageToWord("图里有什么", imageUrl);
@@ -135,8 +165,23 @@ public class SmartRobot {
 
   @Async("taskExecutor")
   public void dealVoice(String openid, String url, String microappid) throws IOException {
+    dealVoice(openid, url, microappid, null);
+  }
+
+  @Async("taskExecutor")
+  public void dealVoice(String openid, String url, String microappid, String externalMessageId)
+      throws IOException {
     String result = asrServiceFactory.getService(smartRobotAsr).getText(url);
-    smartSendContent(openid, result, microappid);
+    var wxUsers = wxUserService.findAllByAppidAndOpenid(microappid, openid);
+    if (!wxUsers.isEmpty()) {
+      var bridgeResult = inputMessageService.bridgeWechatVoiceMessage(microappid, openid,
+          wxUsers.get(0).getName(), url, result, externalMessageId);
+      if (!bridgeResult.getSuccess()) {
+        log.warn("bridge wechat voice to input failed, openid={}, appid={}, code={}", openid,
+            microappid, bridgeResult.getErrorCode());
+      }
+    }
+    smartSendContent(openid, result, microappid, externalMessageId);
   }
 
   // 获取注册触发关键词的方法

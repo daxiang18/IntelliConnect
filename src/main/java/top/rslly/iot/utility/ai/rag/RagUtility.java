@@ -83,6 +83,24 @@ public class RagUtility {
     }
   }
 
+  public static void ingestTextToChroma(String text, Map<String, String> metadataMap,
+      EmbeddingModel embeddingModel, EmbeddingStore<TextSegment> embeddingStore) {
+    if (text == null || text.isBlank()) {
+      throw new IllegalArgumentException("Text content is blank");
+    }
+
+    Document document = Document.from(text);
+    DocumentSplitter splitter = DocumentSplitters.recursive(300, 50);
+    List<TextSegment> segments = splitter.split(document);
+
+    for (TextSegment segment : segments) {
+      Metadata metadata = Metadata.from(new HashMap<>(metadataMap));
+      TextSegment segmentWithMetadata = TextSegment.from(segment.text(), metadata);
+      Embedding embedding = embeddingModel.embed(segmentWithMetadata).content();
+      embeddingStore.add(embedding, segmentWithMetadata);
+    }
+  }
+
   /**
    * 按 productId 过滤检索
    */
@@ -97,6 +115,25 @@ public class RagUtility {
         .filter(filterByUser)
         .maxResults(5)
         .minScore(0.6)
+        .build();
+
+    return store.search(searchRequest);
+  }
+
+  public static EmbeddingSearchResult<TextSegment> searchByCreatedByAndSessionId(
+      EmbeddingStore<TextSegment> store, EmbeddingModel embeddingModel,
+      String query, String createdBy, String sessionId, int maxResults, double minScore) {
+    Embedding queryEmbedding = embeddingModel.embed(query).content();
+    Filter filter = metadataKey("createdBy").isEqualTo(createdBy);
+    if (sessionId != null && !sessionId.isBlank()) {
+      filter = filter.and(metadataKey("sessionId").isEqualTo(sessionId));
+    }
+
+    var searchRequest = EmbeddingSearchRequest.builder()
+        .queryEmbedding(queryEmbedding)
+        .filter(filter)
+        .maxResults(maxResults)
+        .minScore(minScore)
         .build();
 
     return store.search(searchRequest);

@@ -135,6 +135,7 @@ public class DealMsg {
             case "text" -> {
               String msg = JSON.parseObject(bodyInfo).getString("Content");
               String openid = JSON.parseObject(bodyInfo).getString("FromUserName");
+              String msgId = JSON.parseObject(bodyInfo).getString("MsgId");
               // String userid =
               // DigestUtils.md5DigestAsHex(openid.getBytes(StandardCharsets.UTF_8));
               // String ans = router.response(msg);
@@ -144,23 +145,24 @@ public class DealMsg {
                   if (res != null)
                     dealWx.sendContent(openid, getRegisterSuccessMessage(), microappid);
                 } else
-                  smartRobot.smartSendContent(openid, msg, microappid);
+                  smartRobot.smartSendContent(openid, msg, microappid, msgId);
               } else if (microId.equals(ToUserName2)) {
                 if (msg.equals(getRegisterTriggerKeyword())) {
                   var res = wxUserService.wxRegister(microappid2, openid);
                   if (res != null)
                     dealWx.sendContent(openid, getRegisterSuccessMessage(), microappid2);
                 } else
-                  smartRobot.smartSendContent(openid, msg, microappid2);
+                  smartRobot.smartSendContent(openid, msg, microappid2, msgId);
               }
             }
             case "image" -> {
               String openid = JSON.parseObject(bodyInfo).getString("FromUserName");
               String imageUrl = JSON.parseObject(bodyInfo).getString("PicUrl");
+              String msgId = JSON.parseObject(bodyInfo).getString("MsgId");
               if (microId.equals(ToUserName))
-                smartRobot.smartImageSendContent(openid, imageUrl, microappid);
+                smartRobot.smartImageSendContent(openid, imageUrl, microappid, msgId);
               else if (microId.equals(ToUserName2))
-                smartRobot.smartImageSendContent(openid, imageUrl, microappid2);
+                smartRobot.smartImageSendContent(openid, imageUrl, microappid2, msgId);
             }
             case "event" -> {
               String event = JSON.parseObject(bodyInfo).getString("Event");
@@ -194,6 +196,8 @@ public class DealMsg {
                */
               // var s= Arrays.toString(SHACoder.en(openid));
               String content = root.element("Content").getText();
+              Element msgIdElement = root.element("MsgId");
+              String msgId = msgIdElement == null ? null : msgIdElement.getText();
               String userid = DigestUtils.md5DigestAsHex(openid.getBytes(StandardCharsets.UTF_8));
               if (content.equals("消息推送密钥")) {
                 dealWx.sendContent(openid, userid, appid);
@@ -203,18 +207,45 @@ public class DealMsg {
                   dealWx.sendContent(openid, getRegisterSuccessMessage(), appid);
               } else {
                 // String ans = router.response(content);
-                smartRobot.smartSendContent(openid, content, appid);
+                smartRobot.smartSendContent(openid, content, appid, msgId);
               }
             } else if (type.getText().equals("voice")) {
               String voiceContent = root.element("Recognition").getText();
               String mediaId = root.element("MediaId").getText();
+              Element msgIdElement = root.element("MsgId");
+              String msgId = msgIdElement == null ? mediaId : msgIdElement.getText();
               String url = dealWx.getMedia(mediaId, appid);
               if (url != null && !url.equals("")) {
-                smartRobot.dealVoice(openid, url, appid);
+                smartRobot.dealVoice(openid, url, appid, msgId);
               }
             } else if (type.getText().equals("image")) {
               String imageUrl = root.element("PicUrl").getText();
-              smartRobot.smartImageSendContent(openid, imageUrl, appid);
+              Element msgIdElement = root.element("MsgId");
+              String msgId = msgIdElement == null ? null : msgIdElement.getText();
+              smartRobot.smartImageSendContent(openid, imageUrl, appid, msgId);
+            } else if (type.getText().equals("link")) {
+              String title = root.element("Title") == null ? "" : root.element("Title").getText();
+              String description =
+                  root.element("Description") == null ? "" : root.element("Description").getText();
+              String url = root.element("Url") == null ? "" : root.element("Url").getText();
+              Element msgIdElement = root.element("MsgId");
+              String msgId = msgIdElement == null ? null : msgIdElement.getText();
+              String normalizedContent =
+                  ("[链接] " + title + (description.isBlank() ? "" : "：" + description) + " " + url)
+                      .trim();
+              smartRobot.smartSendContent(openid, normalizedContent, appid, msgId);
+            } else if (type.getText().equals("location")) {
+              String latitude =
+                  root.element("Location_X") == null ? "" : root.element("Location_X").getText();
+              String longitude =
+                  root.element("Location_Y") == null ? "" : root.element("Location_Y").getText();
+              String label = root.element("Label") == null ? "" : root.element("Label").getText();
+              Element msgIdElement = root.element("MsgId");
+              String msgId = msgIdElement == null ? null : msgIdElement.getText();
+              String normalizedContent =
+                  ("[位置] 纬度:" + latitude + " 经度:" + longitude + (label.isBlank() ? "" : " 标注:" + label))
+                      .trim();
+              smartRobot.smartSendContent(openid, normalizedContent, appid, msgId);
             }
             // e.printStackTrace();
           } catch (Exception e2) {

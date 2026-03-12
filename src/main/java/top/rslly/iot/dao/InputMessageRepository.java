@@ -28,5 +28,10 @@ import java.util.Optional;
 public interface InputMessageRepository extends JpaRepository<InputMessageEntity, Long> {
   Optional<InputMessageEntity> findFirstByDedupeKey(String dedupeKey);
 
+  Optional<InputMessageEntity> findFirstByDedupeKeyAndCreatedBy(String dedupeKey, String createdBy);
+
   List<InputMessageEntity> findAllBySessionIdOrderByReceivedAtDesc(String sessionId);
+
+  List<InputMessageEntity> findAllBySessionIdAndCreatedByOrderByReceivedAtDesc(String sessionId,
+      String createdBy);
 }

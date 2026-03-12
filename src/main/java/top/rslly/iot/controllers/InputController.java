@@ -22,6 +22,7 @@ package top.rslly.iot.controllers;
 import io.swagger.v3.oas.annotations.Operation;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -29,10 +30,16 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 import top.rslly.iot.param.request.InputMessageCreateParam;
+import top.rslly.iot.param.request.InputMessagePromoteParam;
+import top.rslly.iot.param.request.InputMessageRecallParam;
 import top.rslly.iot.services.InputMessageServiceImpl;
+import top.rslly.iot.services.SafetyServiceImpl;
 import top.rslly.iot.utility.result.JsonResult;
+import top.rslly.iot.utility.result.ResultCode;
+import top.rslly.iot.utility.result.ResultTool;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 
 @RestController
 @RequestMapping(value = "/api/v2/input")
@@ -40,6 +47,8 @@ import jakarta.validation.Valid;
 public class InputController {
   @Autowired
   private InputMessageServiceImpl inputMessageService;
+  @Autowired
+  private SafetyServiceImpl safetyService;
 
   @Operation(summary = "接收标准化输入消息", description = "提供给微信侧车和其他输入源的统一消息接入骨架")
   @RequestMapping(value = "/messages", method = RequestMethod.POST)
@@ -60,5 +69,33 @@ public class InputController {
   public JsonResult<?> getMessagesBySessionId(@RequestParam("sessionId") String sessionId,
       @RequestHeader("Authorization") String header) {
     return inputMessageService.getMessagesBySessionId(sessionId, header);
+  }
+
+  @Operation(summary = "触发标准化输入消息处理", description = "异步将输入消息写入知识向量库并更新处理状态")
+  @RequestMapping(value = "/messages/{id}/process", method = RequestMethod.POST)
+  public JsonResult<?> processMessage(@PathVariable("id") @Min(1) long id,
+      @RequestHeader("Authorization") String header) {
+    return inputMessageService.processMessage(id, header);
+  }
+
+  @Operation(summary = "召回已处理的输入消息", description = "按当前认证用户及可选会话范围对已入向量库的消息做语义检索")
+  @RequestMapping(value = "/messages/recall", method = RequestMethod.POST)
+  public JsonResult<?> recallMessages(@Valid @RequestBody InputMessageRecallParam inputMessageRecallParam,
+      @RequestHeader("Authorization") String header) {
+    return inputMessageService.recallMessages(inputMessageRecallParam, header);
+  }
+
+  @Operation(summary = "提升输入消息为长期记忆", description = "将已 ingest 的输入消息提升到指定产品的 AgentLongMemory")
+  @RequestMapping(value = "/messages/{id}/promote-to-memory", method = RequestMethod.POST)
+  public JsonResult<?> promoteMessageToLongMemory(@PathVariable("id") @Min(1) long id,
+      @Valid @RequestBody InputMessagePromoteParam inputMessagePromoteParam,
+      @RequestHeader("Authorization") String header) {
+    try {
+      if (!safetyService.controlAuthorizeProduct(header, inputMessagePromoteParam.getProductId()))
+        return ResultTool.fail(ResultCode.NO_PERMISSION);
+    } catch (NullPointerException e) {
+      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
+    }
+    return inputMessageService.promoteMessageToLongMemory(id, inputMessagePromoteParam, header);
   }
 }

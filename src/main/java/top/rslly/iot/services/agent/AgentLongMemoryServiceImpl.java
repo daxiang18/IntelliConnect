@@ -27,6 +27,7 @@ import top.rslly.iot.models.WxUserEntity;
 import top.rslly.iot.param.prompt.AgentLongMemoryDescription;
 import top.rslly.iot.param.request.AgentLongMemory;
 import top.rslly.iot.param.request.AgentLongMemoryToolParam;
+import top.rslly.iot.param.response.AgentLongMemoryResponse;
 import top.rslly.iot.utility.JwtTokenUtil;
 import top.rslly.iot.utility.result.JsonResult;
 import top.rslly.iot.utility.result.ResultCode;
@@ -145,7 +146,13 @@ public class AgentLongMemoryServiceImpl implements AgentLongMemoryService {
     agentLongMemoryEntity.setDescription(agentLongMemory.getDescription());
     agentLongMemoryEntity.setMemoryValue(agentLongMemory.getMemoryValue());
     var result = agentLongMemoryRepository.save(agentLongMemoryEntity);
-    return ResultTool.success(result);
+    AgentLongMemoryResponse response = new AgentLongMemoryResponse();
+    response.setId(result.getId());
+    response.setProductId(result.getProductId());
+    response.setMemoryKey(result.getMemoryKey());
+    response.setDescription(result.getDescription());
+    response.setMemoryValue(result.getMemoryValue());
+    return ResultTool.success(response);
   }
 
   @Override

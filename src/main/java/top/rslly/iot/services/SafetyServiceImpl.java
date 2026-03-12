@@ -388,18 +388,6 @@ public class SafetyServiceImpl implements SafetyService {
     if (!checkServiceNotNull(agentMemoryService, "AgentMemoryService")) {
       return false;
     }
-    if (!checkServiceNotNull(wxUserService, "WxUserService")) {
-      return false;
-    }
-    if (!checkServiceNotNull(wxProductBindService, "WxProductBindService")) {
-      return false;
-    }
-    if (!checkServiceNotNull(userService, "UserService")) {
-      return false;
-    }
-    if (!checkServiceNotNull(userProductBindService, "UserProductBindService")) {
-      return false;
-    }
     String token_deal = token.replace(JwtTokenUtil.TOKEN_PREFIX, "");
     String role = JwtTokenUtil.getUserRole(token_deal);
     String username = JwtTokenUtil.getUsername(token_deal);
@@ -408,6 +396,12 @@ public class SafetyServiceImpl implements SafetyService {
       throw new IllegalArgumentException("agentMemoryId not found!");
     String memoryChatId = agentMemoryEntityList.get(0).getChatId();
     if (role.equals("ROLE_" + "wx_user")) {
+      if (!checkServiceNotNull(wxUserService, "WxUserService")) {
+        return false;
+      }
+      if (!checkServiceNotNull(wxProductBindService, "WxProductBindService")) {
+        return false;
+      }
       if (wxUserService.findAllByName(username).isEmpty()) {
         return false;
       }
@@ -426,6 +420,12 @@ public class SafetyServiceImpl implements SafetyService {
       }
       return false;
     } else if (!role.equals("[ROLE_admin]")) {
+      if (!checkServiceNotNull(userService, "UserService")) {
+        return false;
+      }
+      if (!checkServiceNotNull(userProductBindService, "UserProductBindService")) {
+        return false;
+      }
       var userList = userService.findAllByUsername(username);
       if (userList.isEmpty())
         return false;
@@ -502,32 +502,31 @@ public class SafetyServiceImpl implements SafetyService {
 
   @Override
   public boolean controlAuthorizeProduct(String token, int productId) {
-    if (!checkServiceNotNull(wxUserService, "WxUserService")) {
-      return false;
-    }
-    if (!checkServiceNotNull(wxProductBindService, "WxProductBindService")) {
-      return false;
-    }
-    if (!checkServiceNotNull(userService, "UserService")) {
-      return false;
-    }
-    if (!checkServiceNotNull(userProductBindService, "UserProductBindService")) {
-      return false;
-    }
     String token_deal = token.replace(JwtTokenUtil.TOKEN_PREFIX, "");
     String role = JwtTokenUtil.getUserRole(token_deal);
     String username = JwtTokenUtil.getUsername(token_deal);
     if (role.equals("ROLE_" + "wx_user")) {
+      if (!checkServiceNotNull(wxUserService, "WxUserService")) {
+        return false;
+      }
+      if (!checkServiceNotNull(wxProductBindService, "WxProductBindService")) {
+        return false;
+      }
       if (wxUserService.findAllByName(username).isEmpty()) {
         return false;
       }
       List<WxUserEntity> wxUserEntityList = wxUserService.findAllByName(username);
       String appid = wxUserEntityList.get(0).getAppid();
       String openid = wxUserEntityList.get(0).getOpenid();
-      // log.info("productId{}",productId);
       return !wxProductBindService.findByAppidAndOpenidAndProductId(appid, openid, productId)
           .isEmpty();
     } else if (!role.equals("[ROLE_admin]")) {
+      if (!checkServiceNotNull(userService, "UserService")) {
+        return false;
+      }
+      if (!checkServiceNotNull(userProductBindService, "UserProductBindService")) {
+        return false;
+      }
       var userList = userService.findAllByUsername(username);
       if (userList.isEmpty())
         return false;

@@ -20,6 +20,7 @@
 package top.rslly.iot.controllers;
 
 import io.swagger.v3.oas.annotations.Operation;
+import org.eclipse.paho.client.mqttv3.MqttException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.validation.annotation.Validated;
@@ -30,8 +31,12 @@ import top.rslly.iot.services.SafetyServiceImpl;
 import top.rslly.iot.services.agent.OtaXiaozhiPassiveServiceImpl;
 import top.rslly.iot.services.agent.OtaXiaozhiServiceImpl;
 import top.rslly.iot.services.iot.AlarmEventServiceImpl;
+import top.rslly.iot.services.iot.HardWareServiceImpl;
 import top.rslly.iot.services.iot.OtaPassiveServiceImpl;
 import top.rslly.iot.services.iot.OtaServiceImpl;
+import top.rslly.iot.services.storage.DataServiceImpl;
+import top.rslly.iot.services.storage.EventStorageServiceImpl;
+import top.rslly.iot.services.thingsModel.ProductDeviceServiceImpl;
 import top.rslly.iot.utility.result.JsonResult;
 import top.rslly.iot.utility.result.ResultCode;
 import top.rslly.iot.utility.result.ResultTool;
@@ -44,13 +49,21 @@ import jakarta.validation.constraints.Size;
 import java.io.IOException;
 
 /**
- * IoT domain controller for OTA, alarm events, and hardware-specific features.
+ * IoT domain controller for device data, OTA, alarm events, and hardware-specific features.
  */
 @RestController
 @RequestMapping(value = "/api/v2")
 @Validated
 @ConditionalOnProperty(name = "iot.enabled", havingValue = "true", matchIfMissing = true)
 public class IotTool {
+  @Autowired
+  private DataServiceImpl dataService;
+  @Autowired
+  private EventStorageServiceImpl eventStorageService;
+  @Autowired
+  private ProductDeviceServiceImpl productDeviceService;
+  @Autowired
+  private HardWareServiceImpl hardWareService;
   @Autowired
   private OtaServiceImpl otaService;
   @Autowired
@@ -63,6 +76,63 @@ public class IotTool {
   private OtaXiaozhiServiceImpl otaXiaozhiService;
   @Autowired
   private OtaXiaozhiPassiveServiceImpl otaXiaozhiPassiveService;
+
+  // ── Device Data / Control ───────────────────────────────────────────────────
+
+  @Operation(summary = "用于获取连接的设备数量", description = "仅包含当前用户绑定的设备")
+  @RequestMapping(value = "/getConnectedNum", method = RequestMethod.GET)
+  public JsonResult<?> getConnectedNum(@RequestHeader("Authorization") String header) {
+    return ResultTool.success(productDeviceService.getProductDeviceConnectedNum(header));
+  }
+
+  @Operation(summary = "设备属性或服务控制api接口",
+      description = "注意传入参数为ControlParam,属性或服务设置重复时候取第一个")
+  @RequestMapping(value = "/control", method = RequestMethod.POST)
+  public JsonResult<?> control(@Valid @RequestBody ControlParam controlParam,
+      @RequestHeader("Authorization") String header) throws MqttException {
+    return hardWareService.control(controlParam, header);
+  }
+
+  @Operation(summary = "用于获取物联网一段时间的设备数据", description = "时间参数请使用两个毫秒时间戳")
+  @RequestMapping(value = "/readData", method = RequestMethod.POST)
+  public JsonResult<?> readData(@Valid @RequestBody ReadData readData,
+      @RequestHeader("Authorization") String header) {
+    try {
+      if (!safetyService.controlAuthorizeDevice(header, readData.getName()))
+        return ResultTool.fail(ResultCode.NO_PERMISSION);
+    } catch (Exception e) {
+      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
+    }
+    return dataService.findAllByTimeBetweenAndDeviceNameAndJsonKey(readData.getTime1(),
+        readData.getTime2(), readData.getName(), readData.getJsonKey());
+  }
+
+  @Operation(summary = "用于获取物联网一段时间的设备事件数据", description = "时间参数请使用两个毫秒时间戳")
+  @RequestMapping(value = "/readEvent", method = RequestMethod.POST)
+  public JsonResult<?> readEvent(@Valid @RequestBody ReadData readData,
+      @RequestHeader("Authorization") String header) {
+    try {
+      if (!safetyService.controlAuthorizeDevice(header, readData.getName()))
+        return ResultTool.fail(ResultCode.NO_PERMISSION);
+    } catch (Exception e) {
+      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
+    }
+    return eventStorageService.findAllByTimeBetweenAndDeviceNameAndJsonKey(readData.getTime1(),
+        readData.getTime2(), readData.getName(), readData.getJsonKey());
+  }
+
+  @Operation(summary = "获取属性实时数据", description = "高性能接口(带redis缓存)")
+  @RequestMapping(value = "/metaData", method = RequestMethod.POST)
+  public JsonResult<?> metaData(@Valid @RequestBody MetaData metaData,
+      @RequestHeader("Authorization") String header) {
+    try {
+      if (!safetyService.controlAuthorizeDevice(header, metaData.getDeviceId()))
+        return ResultTool.fail(ResultCode.NO_PERMISSION);
+    } catch (Exception e) {
+      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
+    }
+    return dataService.metaData(metaData.getDeviceId(), metaData.getJsonKey());
+  }
 
   @RequestMapping(value = "/otaUpload", method = RequestMethod.POST)
   public JsonResult<?> ota(@RequestParam("name") @NotBlank(message = "name 不能为空")

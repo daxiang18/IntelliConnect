@@ -28,6 +28,7 @@ import top.rslly.iot.param.response.InputMessageRecallItemResponse;
 import top.rslly.iot.param.response.InputMessageResponse;
 import top.rslly.iot.services.agent.AgentLongMemoryServiceImpl;
 import top.rslly.iot.utility.JwtTokenUtil;
+import top.rslly.iot.utility.input.UrlContentNormalizer;
 import top.rslly.iot.utility.result.JsonResult;
 import top.rslly.iot.utility.result.ResultCode;
 
@@ -56,6 +57,8 @@ class InputMessageServiceImplTest {
   private TaskExecutor taskExecutor;
   @Mock
   private AgentLongMemoryServiceImpl agentLongMemoryService;
+  @Mock
+  private UrlContentNormalizer urlContentNormalizer;
   @InjectMocks
   private InputMessageServiceImpl inputMessageService;
 
@@ -95,6 +98,42 @@ class InputMessageServiceImplTest {
 
     Assertions.assertTrue(result.getSuccess());
     Assertions.assertEquals("ingested", entity.getStatus());
+    verify(knowledgeChatEmbeddingStore).add(any(Embedding.class), any(TextSegment.class));
+  }
+
+  @Test
+  void processUrlMessageShouldNormalizeUrlBeforeIngest() {
+    InputMessageEntity entity = new InputMessageEntity();
+    entity.setId(11L);
+    entity.setCreatedBy("smoke-user");
+    entity.setSessionId("session-url");
+    entity.setDedupeKey("dedupe-url");
+    entity.setContentType("url");
+    entity.setRawContent("https://example.com/article");
+    entity.setNormalizedContent("[链接] Example article https://example.com/article");
+    entity.setStatus("received");
+
+    when(inputMessageRepository.findById(11L)).thenReturn(Optional.of(entity));
+    when(inputMessageRepository.save(any(InputMessageEntity.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+    when(urlContentNormalizer.normalize("https://example.com/article"))
+        .thenReturn(new UrlContentNormalizer.UrlNormalizedResult(true,
+            "# Example Article\n\n- 来源：https://example.com/article\n\n## 正文\n正文内容",
+            "Example Article", "", null));
+    when(embeddingModel.embed(any(TextSegment.class)))
+        .thenReturn(Response.from(Embedding.from(new float[] {0.1f, 0.2f})));
+    doAnswer(invocation -> {
+      Runnable runnable = invocation.getArgument(0);
+      runnable.run();
+      return null;
+    }).when(taskExecutor).execute(any(Runnable.class));
+
+    JsonResult<?> result = inputMessageService.processMessage(11L, token);
+
+    Assertions.assertTrue(result.getSuccess());
+    Assertions.assertEquals("ingested", entity.getStatus());
+    Assertions.assertTrue(entity.getNormalizedContent().contains("# Example Article"));
+    verify(urlContentNormalizer).normalize("https://example.com/article");
     verify(knowledgeChatEmbeddingStore).add(any(Embedding.class), any(TextSegment.class));
   }
 
@@ -249,6 +288,45 @@ class InputMessageServiceImplTest {
     Assertions.assertEquals("wechat:wx-app:openid-1", entity.getSessionId());
     Assertions.assertEquals("wechat:wx-app:openid-1:msg-1", entity.getDedupeKey());
     Assertions.assertEquals("ingested", entity.getStatus());
+    verify(knowledgeChatEmbeddingStore).add(any(Embedding.class), any(TextSegment.class));
+  }
+
+  @Test
+  void bridgeWechatUrlMessageShouldCreateAndProcessMessage() {
+    AtomicReference<InputMessageEntity> savedRef = new AtomicReference<>();
+    when(inputMessageRepository.findFirstByDedupeKey(any())).thenReturn(Optional.empty());
+    when(inputMessageRepository.save(any(InputMessageEntity.class)))
+        .thenAnswer(invocation -> {
+          InputMessageEntity entity = invocation.getArgument(0);
+          if (entity.getId() == 0L) {
+            entity.setId(8L);
+          }
+          savedRef.set(entity);
+          return entity;
+        });
+    when(inputMessageRepository.findById(8L)).thenAnswer(invocation -> Optional.of(savedRef.get()));
+    when(urlContentNormalizer.normalize("https://example.com/link"))
+        .thenReturn(new UrlContentNormalizer.UrlNormalizedResult(true,
+            "# Link Title\n\n- 来源：https://example.com/link\n\n## 正文\nLink body",
+            "Link Title", "", null));
+    when(embeddingModel.embed(any(TextSegment.class)))
+        .thenReturn(Response.from(Embedding.from(new float[] {0.1f, 0.2f})));
+    doAnswer(invocation -> {
+      Runnable runnable = invocation.getArgument(0);
+      runnable.run();
+      return null;
+    }).when(taskExecutor).execute(any(Runnable.class));
+
+    JsonResult<?> result = inputMessageService.bridgeWechatUrlMessage("wx-app", "openid-4",
+        "wx-user-name", "https://example.com/link", "Link Title", "Link summary", "msg-4");
+
+    Assertions.assertTrue(result.getSuccess());
+    InputMessageEntity entity = (InputMessageEntity) result.getData();
+    Assertions.assertEquals("url", entity.getContentType());
+    Assertions.assertEquals("https://example.com/link", entity.getRawContent());
+    Assertions.assertTrue(entity.getNormalizedContent().contains("# Link Title"));
+    Assertions.assertEquals("ingested", entity.getStatus());
+    verify(urlContentNormalizer).normalize("https://example.com/link");
     verify(knowledgeChatEmbeddingStore).add(any(Embedding.class), any(TextSegment.class));
   }
 

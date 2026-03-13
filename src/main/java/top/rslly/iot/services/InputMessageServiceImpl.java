@@ -42,6 +42,7 @@ import top.rslly.iot.param.response.InputMessageResponse;
 import top.rslly.iot.services.agent.AgentLongMemoryServiceImpl;
 import top.rslly.iot.utility.JwtTokenUtil;
 import top.rslly.iot.utility.ai.rag.RagUtility;
+import top.rslly.iot.utility.input.UrlContentNormalizer;
 import top.rslly.iot.utility.result.JsonResult;
 import top.rslly.iot.utility.result.ResultCode;
 import top.rslly.iot.utility.result.ResultTool;
@@ -64,6 +65,7 @@ public class InputMessageServiceImpl implements InputMessageService {
   private static final String CONTENT_TYPE_TEXT = "text";
   private static final String CONTENT_TYPE_IMAGE = "image";
   private static final String CONTENT_TYPE_VOICE = "voice";
+  private static final String CONTENT_TYPE_URL = "url";
   private static final String WECHAT_IMAGE_ATTACHMENT_NAME = "image";
   private static final String WECHAT_VOICE_ATTACHMENT_NAME = "voice";
   private static final String WECHAT_IMAGE_MIME_TYPE = "image/jpeg";
@@ -80,6 +82,8 @@ public class InputMessageServiceImpl implements InputMessageService {
   private TaskExecutor taskExecutor;
   @Autowired
   private AgentLongMemoryServiceImpl agentLongMemoryService;
+  @Autowired
+  private UrlContentNormalizer urlContentNormalizer;
 
   private String resolveUsername(String token) {
     String tokenDeal = token.replace(JwtTokenUtil.TOKEN_PREFIX, "");
@@ -102,6 +106,27 @@ public class InputMessageServiceImpl implements InputMessageService {
       memoryValue = entity.getRawContent();
     }
     return memoryValue;
+  }
+
+  private boolean isUrlContentType(String contentType) {
+    return CONTENT_TYPE_URL.equalsIgnoreCase(contentType);
+  }
+
+  private String resolveUrlContentForIngest(InputMessageEntity entity) {
+    var normalizedResult = urlContentNormalizer.normalize(entity.getRawContent());
+    String normalizedContent = normalizedResult.normalizedContent();
+    String fallbackSummary = entity.getNormalizedContent();
+    if (!normalizedResult.success() && fallbackSummary != null && !fallbackSummary.isBlank()
+        && !fallbackSummary.equals(entity.getRawContent()) && !normalizedContent.contains(fallbackSummary)) {
+      normalizedContent = normalizedContent + "\n\n## 原始链接消息\n" + fallbackSummary;
+    }
+    entity.setNormalizedContent(normalizedContent);
+    inputMessageRepository.save(entity);
+    if (!normalizedResult.success()) {
+      log.warn("url content normalization failed, messageId={}, reason={}", entity.getId(),
+          normalizedResult.failureReason());
+    }
+    return normalizedContent;
   }
 
   private static InputMessageResponse toResponse(InputMessageEntity entity) {
@@ -176,17 +201,32 @@ public class InputMessageServiceImpl implements InputMessageService {
 
     entity.setStatus(STATUS_PROCESSING);
     InputMessageEntity savedEntity = inputMessageRepository.save(entity);
-    String contentToIngest = normalizedContent;
     String sessionId = entity.getSessionId();
     String dedupeKey = entity.getDedupeKey();
     String createdBy = entity.getCreatedBy();
+    String contentType = entity.getContentType();
+    String rawContent = entity.getRawContent();
 
     taskExecutor.execute(() -> {
       try {
+        String contentToIngest = isUrlContentType(contentType)
+            ? resolveUrlContentForIngest(entity)
+            : entity.getNormalizedContent();
+        if (contentToIngest == null || contentToIngest.isBlank()) {
+          contentToIngest = rawContent;
+        }
+        if (contentToIngest == null || contentToIngest.isBlank()) {
+          throw new IllegalArgumentException("Text content is blank");
+        }
+
         Map<String, String> metadata = new HashMap<>();
         metadata.put("sessionId", sessionId);
         metadata.put("dedupeKey", dedupeKey);
         metadata.put("createdBy", createdBy);
+        metadata.put("contentType", contentType == null ? CONTENT_TYPE_TEXT : contentType);
+        if (isUrlContentType(contentType) && rawContent != null && !rawContent.isBlank()) {
+          metadata.put("sourceUrl", rawContent);
+        }
         RagUtility.ingestTextToChroma(contentToIngest, metadata, embeddingModel,
             knowledgeChatEmbeddingStore);
         updateStatus(id, STATUS_INGESTED);
@@ -208,6 +248,36 @@ public class InputMessageServiceImpl implements InputMessageService {
       return SOURCE_TYPE_WECHAT + ":" + appid + ":" + openid + ":" + externalMessageId;
     }
     return SOURCE_TYPE_WECHAT + ":" + appid + ":" + openid + ":" + UUID.randomUUID();
+  }
+
+  @Transactional(rollbackFor = Exception.class)
+  public JsonResult<?> bridgeWechatUrlMessage(String appid, String openid, String username,
+      String url, String title, String description, String externalMessageId) {
+    if (appid == null || appid.isBlank() || openid == null || openid.isBlank() || username == null
+        || username.isBlank() || url == null || url.isBlank()) {
+      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
+    }
+
+    InputMessageCreateParam inputMessageCreateParam = new InputMessageCreateParam();
+    inputMessageCreateParam.setSourceType(SOURCE_TYPE_WECHAT);
+    inputMessageCreateParam.setSourceAccountId(appid);
+    inputMessageCreateParam.setSessionId(buildWechatSessionId(appid, openid));
+    inputMessageCreateParam.setSenderId(openid);
+    inputMessageCreateParam.setContentType(CONTENT_TYPE_URL);
+    inputMessageCreateParam.setRawContent(url);
+    inputMessageCreateParam.setNormalizedContent(UrlContentNormalizer.buildLinkSummary(title, description, url));
+    inputMessageCreateParam.setDedupeKey(buildWechatDedupeKey(appid, openid, externalMessageId));
+
+    JsonResult<?> createResult = createMessageForUsername(inputMessageCreateParam, username);
+    if (!createResult.getSuccess() || !(createResult.getData() instanceof InputMessageEntity entity)) {
+      return createResult;
+    }
+
+    JsonResult<?> processResult = processMessageForUsername(entity.getId(), username);
+    if (!processResult.getSuccess()) {
+      return processResult;
+    }
+    return ResultTool.success(entity);
   }
 
   @Transactional(rollbackFor = Exception.class)

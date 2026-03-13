@@ -38,6 +38,7 @@ import top.rslly.iot.utility.ai.chain.Router;
 import top.rslly.iot.utility.ai.llm.LLMFactory;
 import top.rslly.iot.utility.ai.voice.ASR.AsrServiceFactory;
 import top.rslly.iot.utility.ai.voice.ASR.Audio2Text;
+import top.rslly.iot.utility.input.UrlContentNormalizer;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -91,6 +92,29 @@ public class SmartRobot {
       log.warn("bridge wechat message to input failed, openid={}, appid={}, code={}", openid,
           microappid, bridgeResult.getErrorCode());
     }
+    replyWithRouter(openid, msg, microappid, resolveProductId(microappid, openid));
+  }
+
+  @Async("taskExecutor")
+  public void smartSendLinkContent(String openid, String url, String title, String description,
+      String microappid, String externalMessageId) throws IOException {
+    var wxUsers = wxUserService.findAllByAppidAndOpenid(microappid, openid);
+    if (wxUsers.isEmpty()) {
+      dealWx.sendContent(openid, getWxUnregisteredMessage(), microappid);
+      return;
+    }
+    var wxUser = wxUsers.get(0);
+    var bridgeResult = inputMessageService.bridgeWechatUrlMessage(microappid, openid,
+        wxUser.getName(), url, title, description, externalMessageId);
+    if (!bridgeResult.getSuccess()) {
+      log.warn("bridge wechat link to input failed, openid={}, appid={}, code={}", openid,
+          microappid, bridgeResult.getErrorCode());
+    }
+    replyWithRouter(openid, UrlContentNormalizer.buildLinkSummary(title, description, url),
+        microappid, resolveProductId(microappid, openid));
+  }
+
+  private int resolveProductId(String microappid, String openid) {
     var productActiveEntities = productActiveService.findAllByAppidAndOpenid(microappid, openid);
     int productId = 0;
     if (!productActiveEntities.isEmpty()) {
@@ -112,6 +136,11 @@ public class SmartRobot {
         }
       }
     }
+    return productId;
+  }
+
+  private void replyWithRouter(String openid, String msg, String microappid, int productId)
+      throws IOException {
     String content = router.response(msg, openid, productId, microappid);
     if (content.length() > 800) {
       dealWx.sendContent(openid, content.substring(0, 800), microappid);

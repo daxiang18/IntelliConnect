@@ -230,10 +230,7 @@ public class DealMsg {
               String url = root.element("Url") == null ? "" : root.element("Url").getText();
               Element msgIdElement = root.element("MsgId");
               String msgId = msgIdElement == null ? null : msgIdElement.getText();
-              String normalizedContent =
-                  ("[链接] " + title + (description.isBlank() ? "" : "：" + description) + " " + url)
-                      .trim();
-              smartRobot.smartSendContent(openid, normalizedContent, appid, msgId);
+              smartRobot.smartSendLinkContent(openid, url, title, description, appid, msgId);
             } else if (type.getText().equals("location")) {
               String latitude =
                   root.element("Location_X") == null ? "" : root.element("Location_X").getText();

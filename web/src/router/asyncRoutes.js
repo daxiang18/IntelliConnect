@@ -5,6 +5,17 @@ import permission from './modules/permission'
 
 export const asyncRoutes = [
   {
+    path: '/home',
+    name: 'Home',
+    component: () => import('@/views/home/index.vue'),
+    meta: {
+      title: 'homePage',
+      auth: ['[ROLE_admin]', '[ROLE_guest]'],
+      icon: 'HomeOutlined',
+      domain: 'shared',
+    },
+  },
+  {
     path: '/dashboard',
     name: 'Dashboard',
     component: () => import('@/views/dashboard/index.vue'),

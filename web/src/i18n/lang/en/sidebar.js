@@ -100,7 +100,8 @@ const realProject = {
   liveVideo: 'LiveVideo',
 }
 export default {
-  dashboard: 'Dashboard',
+  homePage: 'Unified Home',
+  dashboard: 'System Dashboard',
   ...nestMenu,
   ...component,
   ...plugin,

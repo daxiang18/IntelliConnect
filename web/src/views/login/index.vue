@@ -204,11 +204,13 @@
 import { ref, reactive } from 'vue'
 import { UserOutlined, LockOutlined } from '@ant-design/icons-vue'
 import { loginIn } from '@/api/user'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useStore } from 'vuex'
 import { message } from 'ant-design-vue'
+import { resolveTargetPath } from '@/utils/domain'
 
 const router = useRouter()
+const route = useRoute()
 const store = useStore()
 const loginForm = reactive({
   username: '',
@@ -219,28 +221,30 @@ const loading = ref(false)
 const rememberMe = ref(false)
 
 const handleSubmit = (values) => {
+  loading.value = true
   loginIn(values)
     .then(async (res) => {
       const { data, errorCode } = res.data
-      console.log('auth', data)
-      if (errorCode == 200) {
+      if (errorCode === 200) {
         store.commit('auth/SET_AUTH', data)
         await store.dispatch('domain/fetchDomainConfig')
         const domainState = store.state.domain
         store.commit('auth/GENERATE_ROUTES', { auth: data, domainState })
-        console.log("__________________****")
-        console.log(store.getters['auth/token'])
-        router.push('/dashboard')
-      } else if(errorCode == 2007){
+        const redirectTarget = Array.isArray(route.query.redirect) ? route.query.redirect[0] : route.query.redirect
+        router.replace(resolveTargetPath(domainState, redirectTarget))
+      } else if (errorCode === 2007) {
         message.warn('账号不存在')
-      }else if(errorCode == 2003){
+      } else if (errorCode === 2003) {
         message.warn('密码错误')
-      }else{
+      } else {
         message.warn('系统错误，请重新登录')
       }
     })
     .catch((err) => {
       console.log(err)
+    })
+    .finally(() => {
+      loading.value = false
     })
 }
 </script>

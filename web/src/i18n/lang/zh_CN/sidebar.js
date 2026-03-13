@@ -102,7 +102,8 @@ const realProject = {
   liveVideo: '直播视频',
 }
 export default {
-  dashboard: '首页',
+  homePage: '统一入口',
+  dashboard: '系统仪表盘',
   ...nestMenu,
   ...component,
   ...plugin,

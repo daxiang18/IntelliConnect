@@ -8,43 +8,60 @@ import { setupI18n } from '@/i18n'
 import { setupAntd } from '@/plugins/antd'
 import { setupComponent } from '@/components'
 import { setupDirective } from '@/directives'
+import { resolveTargetPath } from '@/utils/domain'
 
 import nProgress from '@/plugins/nProgress'
 // 全局样式
 import '@/assets/global.scss'
 import '@/assets/common.scss'
 
+const PUBLIC_PATHS = new Set(['/login', '/register', '/forgotPassword'])
+
+async function ensureDomainConfig() {
+  if (!store.state.domain.loaded) {
+    await store.dispatch('domain/fetchDomainConfig')
+  }
+  return store.state.domain
+}
+
 router.beforeEach(async (to, from, next) => {
   nProgress.start()
   const token = store.getters['auth/token']
-  //console.log(token)
-  // next()
-  if (to.path === '/login'||to.path === '/register'||to.path == '/forgotPassword') {
-    // 如果要跳转搭login
+  if (PUBLIC_PATHS.has(to.path)) {
+    if (token) {
+      const domainState = await ensureDomainConfig()
+      return next({
+        path: resolveTargetPath(domainState, to.query.redirect),
+        replace: true,
+      })
+    }
     next()
   } else {
-    // 存在token
     if (token) {
+      const domainState = await ensureDomainConfig()
       const menuList = store.state.auth.menuList
-      //  正常跳转 ，已生成路由
-      if (menuList.length) {
-        next()
-      } else {
-        //   生成路由再跳转
-        const auth = token // 解析token 或者请求后台回去登陆角色
-        // Fetch domain config before generating routes
-        await store.dispatch('domain/fetchDomainConfig')
-        const domainState = store.state.domain
+      if (!menuList.length) {
+        const auth = token
         store.commit('auth/GENERATE_ROUTES', { auth, domainState })
-        next({
-          path: to.path,
+        return next({
+          path: resolveTargetPath(domainState, to.path),
           replace: true,
         })
-        // next()
       }
+
+      if (to.path === '/' || !to.matched.length) {
+        return next({
+          path: resolveTargetPath(domainState),
+          replace: true,
+        })
+      }
+
+      next()
     } else {
-      //  不存在token
-      next('/login')
+      next({
+        path: '/login',
+        query: to.fullPath && to.fullPath !== '/' ? { redirect: to.fullPath } : undefined,
+      })
     }
   }
 })

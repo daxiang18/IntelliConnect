@@ -2,7 +2,7 @@ import { getDomainConfig } from '@/api/domain'
 
 const state = {
   loaded: false,
-  hub: { enabled: true, defaultEntry: '/dashboard', menuGroup: 'hub' },
+  hub: { enabled: true, defaultEntry: '/home', menuGroup: 'hub' },
   iot: { enabled: true, defaultEntry: '/product', menuGroup: 'iot' },
 }
 
@@ -18,6 +18,9 @@ const mutations = {
     if (config.iot) state.iot = { ...state.iot, ...config.iot }
     state.loaded = true
   },
+  SET_DOMAIN_LOADED(state) {
+    state.loaded = true
+  },
 }
 
 const actions = {
@@ -26,10 +29,13 @@ const actions = {
       const res = await getDomainConfig()
       if (res.data && res.data.success && res.data.data) {
         commit('SET_DOMAIN_CONFIG', res.data.data)
+        return
       }
     } catch (e) {
       console.warn('[domain] Failed to fetch domain config, using defaults:', e.message)
     }
+
+    commit('SET_DOMAIN_LOADED')
   },
 }
 

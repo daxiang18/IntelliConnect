@@ -1,0 +1,36 @@
+server:
+  port: ${SMOKE_SERVER_PORT:18080}
+
+grpc:
+  server:
+    port: ${SMOKE_GRPC_PORT:19090}
+
+spring:
+  datasource:
+    url: jdbc:mysql://${SMOKE_MYSQL_HOST:127.0.0.1}:${SMOKE_MYSQL_PORT:13306}/cwliot1.8?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${SMOKE_MYSQL_USERNAME:root}
+    password: ${SMOKE_MYSQL_PASSWORD:change-me}
+  data:
+    redis:
+      host: ${SMOKE_REDIS_HOST:127.0.0.1}
+      port: ${SMOKE_REDIS_PORT:16380}
+      password: ${SMOKE_REDIS_PASSWORD:1234}
+      database: ${SMOKE_REDIS_DATABASE:15}
+
+storage:
+  database: mysql
+
+rag:
+  knowledge_chat_embeddingStore_url: ${SMOKE_CHROMA_URL:http://127.0.0.1:18000}
+
+wx:
+  debug: true
+
+hub:
+  default-entry: /home
+
+iot:
+  enabled: false
+  require-mqtt: false
+  require-influx: false
+  require-ota: false

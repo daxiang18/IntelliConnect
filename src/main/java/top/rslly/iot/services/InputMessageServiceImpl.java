@@ -20,6 +20,7 @@
 package top.rslly.iot.services;
 
 import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONObject;
 import dev.langchain4j.store.embedding.EmbeddingSearchResult;
 import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.model.embedding.EmbeddingModel;
@@ -40,6 +41,7 @@ import top.rslly.iot.param.request.InputMessageRecallParam;
 import top.rslly.iot.param.response.InputMessageRecallItemResponse;
 import top.rslly.iot.param.response.InputMessageResponse;
 import top.rslly.iot.services.agent.AgentLongMemoryServiceImpl;
+import top.rslly.iot.utility.input.InputContentAutoTagger;
 import top.rslly.iot.utility.JwtTokenUtil;
 import top.rslly.iot.utility.ai.rag.RagUtility;
 import top.rslly.iot.utility.input.UrlContentNormalizer;
@@ -49,8 +51,12 @@ import top.rslly.iot.utility.result.ResultTool;
 
 import jakarta.annotation.Resource;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -66,10 +72,17 @@ public class InputMessageServiceImpl implements InputMessageService {
   private static final String CONTENT_TYPE_IMAGE = "image";
   private static final String CONTENT_TYPE_VOICE = "voice";
   private static final String CONTENT_TYPE_URL = "url";
+  private static final String SYNC_TARGET_FEISHU = "feishu";
+  private static final String SYNC_TARGET_GITHUB = "github";
+  private static final String SYNC_STATUS_NOT_REQUESTED = "not_requested";
+  private static final String SYNC_STATUS_PENDING = "pending";
+  private static final String SYNC_STATUS_SYNCED = "synced";
+  private static final String SYNC_STATUS_FAILED = "failed";
   private static final String WECHAT_IMAGE_ATTACHMENT_NAME = "image";
   private static final String WECHAT_VOICE_ATTACHMENT_NAME = "voice";
   private static final String WECHAT_IMAGE_MIME_TYPE = "image/jpeg";
   private static final String WECHAT_VOICE_MIME_TYPE = "audio/amr";
+  private static final Set<String> SUPPORTED_SYNC_TARGETS = Set.of(SYNC_TARGET_FEISHU, SYNC_TARGET_GITHUB);
 
   @Resource
   private InputMessageRepository inputMessageRepository;
@@ -84,6 +97,10 @@ public class InputMessageServiceImpl implements InputMessageService {
   private AgentLongMemoryServiceImpl agentLongMemoryService;
   @Autowired
   private UrlContentNormalizer urlContentNormalizer;
+  @Autowired
+  private InputContentAutoTagger inputContentAutoTagger;
+  @Autowired
+  private FeishuSyncService feishuSyncService;
 
   private String resolveUsername(String token) {
     String tokenDeal = token.replace(JwtTokenUtil.TOKEN_PREFIX, "");
@@ -129,7 +146,104 @@ public class InputMessageServiceImpl implements InputMessageService {
     return normalizedContent;
   }
 
-  private static InputMessageResponse toResponse(InputMessageEntity entity) {
+  private InputContentAutoTagger.AutoTagResult resolveAutoTagResult(String contentType, String rawContent,
+      String normalizedContent) {
+    return inputContentAutoTagger.analyze(contentType, rawContent, normalizedContent);
+  }
+
+  private String normalizeSyncTargets(String rawSyncTargets) {
+    if (rawSyncTargets == null || rawSyncTargets.isBlank()) {
+      return null;
+    }
+    LinkedHashSet<String> normalizedTargets = new LinkedHashSet<>();
+    for (String syncTarget : inputContentAutoTagger.parseTags(rawSyncTargets)) {
+      String normalizedTarget = syncTarget.toLowerCase(Locale.ROOT);
+      if (!SUPPORTED_SYNC_TARGETS.contains(normalizedTarget)) {
+        throw new IllegalArgumentException("Unsupported sync target: " + syncTarget);
+      }
+      normalizedTargets.add(normalizedTarget);
+    }
+    return normalizedTargets.isEmpty() ? null : String.join(",", normalizedTargets);
+  }
+
+  private String resolveSyncStatus(String syncTargets, String syncStatus) {
+    if (syncStatus != null && !syncStatus.isBlank()) {
+      return syncStatus;
+    }
+    return syncTargets == null || syncTargets.isBlank() ? SYNC_STATUS_NOT_REQUESTED : SYNC_STATUS_PENDING;
+  }
+
+  private boolean shouldSyncToTarget(String syncTargets, String target) {
+    return inputContentAutoTagger.parseTags(syncTargets).stream()
+        .map(tag -> tag.toLowerCase(Locale.ROOT))
+        .anyMatch(target::equals);
+  }
+
+  private JSONObject parseExternalReferences(String externalReferencesJson) {
+    if (externalReferencesJson == null || externalReferencesJson.isBlank()) {
+      return new JSONObject();
+    }
+    JSONObject externalReferences = JSON.parseObject(externalReferencesJson);
+    return externalReferences == null ? new JSONObject() : externalReferences;
+  }
+
+  private String resolveAggregateSyncStatus(String syncTargets, JSONObject externalReferences) {
+    List<String> targets = inputContentAutoTagger.parseTags(syncTargets);
+    if (targets.isEmpty()) {
+      return SYNC_STATUS_NOT_REQUESTED;
+    }
+
+    boolean allSynced = true;
+    for (String target : targets) {
+      JSONObject targetReference = externalReferences.getJSONObject(target);
+      String targetStatus = targetReference == null ? null : targetReference.getString("status");
+      if (SYNC_STATUS_FAILED.equals(targetStatus)) {
+        return SYNC_STATUS_FAILED;
+      }
+      if (!SYNC_STATUS_SYNCED.equals(targetStatus)) {
+        allSynced = false;
+      }
+    }
+    return allSynced ? SYNC_STATUS_SYNCED : SYNC_STATUS_PENDING;
+  }
+
+  private void updateTargetSyncState(long id, String target, String targetStatus, Long syncedAt,
+      Map<String, Object> targetReferenceFields) {
+    inputMessageRepository.findById(id).ifPresent(entity -> {
+      JSONObject externalReferences = parseExternalReferences(entity.getExternalReferencesJson());
+      JSONObject targetReference = externalReferences.getJSONObject(target);
+      if (targetReference == null) {
+        targetReference = new JSONObject();
+      }
+      if (targetReferenceFields != null) {
+        targetReferenceFields.forEach(targetReference::put);
+      }
+      targetReference.put("status", targetStatus);
+      targetReference.put("updatedAt", System.currentTimeMillis());
+      externalReferences.put(target, targetReference);
+      entity.setExternalReferencesJson(externalReferences.toJSONString());
+      entity.setSyncStatus(resolveAggregateSyncStatus(entity.getSyncTargets(), externalReferences));
+      if (syncedAt != null) {
+        entity.setSyncedAt(syncedAt);
+      }
+      inputMessageRepository.save(entity);
+    });
+  }
+
+  private Map<String, Object> buildTargetSyncFailureReference(Exception exception) {
+    Map<String, Object> reference = new LinkedHashMap<>();
+    reference.put("errorType", exception.getClass().getSimpleName());
+    reference.put("errorMessage",
+        exception.getMessage() == null || exception.getMessage().isBlank()
+            ? exception.getClass().getSimpleName()
+            : exception.getMessage());
+    return reference;
+  }
+
+  private InputMessageResponse toResponse(InputMessageEntity entity) {
+    InputContentAutoTagger.AutoTagResult autoTagResult =
+        resolveAutoTagResult(entity.getContentType(), entity.getRawContent(), entity.getNormalizedContent());
+    String syncTargets = entity.getSyncTargets();
     InputMessageResponse response = new InputMessageResponse();
     response.setId(entity.getId());
     response.setSourceType(entity.getSourceType());
@@ -143,6 +257,12 @@ public class InputMessageServiceImpl implements InputMessageService {
     response.setDedupeKey(entity.getDedupeKey());
     response.setStatus(entity.getStatus());
     response.setReceivedAt(entity.getReceivedAt());
+    response.setSyncTargets(inputContentAutoTagger.parseTags(syncTargets));
+    response.setSyncStatus(resolveSyncStatus(syncTargets, entity.getSyncStatus()));
+    response.setSyncedAt(entity.getSyncedAt());
+    response.setExternalReferencesJson(entity.getExternalReferencesJson());
+    response.setCategory(autoTagResult.category());
+    response.setTags(autoTagResult.tags());
     return response;
   }
 
@@ -154,6 +274,15 @@ public class InputMessageServiceImpl implements InputMessageService {
         return ResultTool.fail(ResultCode.NO_PERMISSION);
       }
       return ResultTool.success(existing.get());
+    }
+
+    String normalizedSyncTargets;
+    try {
+      normalizedSyncTargets = normalizeSyncTargets(inputMessageCreateParam.getSyncTargets());
+    } catch (IllegalArgumentException ex) {
+      log.warn("create input message failed, unsupported sync target, dedupeKey={}",
+          inputMessageCreateParam.getDedupeKey(), ex);
+      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
     }
 
     InputMessageEntity entity = new InputMessageEntity();
@@ -176,6 +305,10 @@ public class InputMessageServiceImpl implements InputMessageService {
         ? System.currentTimeMillis()
         : inputMessageCreateParam.getReceivedAt());
     entity.setCreatedBy(username);
+    entity.setSyncTargets(normalizedSyncTargets);
+    entity.setSyncStatus(resolveSyncStatus(normalizedSyncTargets, null));
+    entity.setSyncedAt(null);
+    entity.setExternalReferencesJson(null);
 
     return ResultTool.success(inputMessageRepository.save(entity));
   }
@@ -219,16 +352,36 @@ public class InputMessageServiceImpl implements InputMessageService {
           throw new IllegalArgumentException("Text content is blank");
         }
 
+        InputContentAutoTagger.AutoTagResult autoTagResult =
+            resolveAutoTagResult(contentType, rawContent, contentToIngest);
         Map<String, String> metadata = new HashMap<>();
         metadata.put("sessionId", sessionId);
         metadata.put("dedupeKey", dedupeKey);
         metadata.put("createdBy", createdBy);
         metadata.put("contentType", contentType == null ? CONTENT_TYPE_TEXT : contentType);
+        metadata.put("contentCategory", autoTagResult.category());
+        metadata.put("contentTags", String.join(",", autoTagResult.tags()));
+        if (entity.getSyncTargets() != null && !entity.getSyncTargets().isBlank()) {
+          metadata.put("syncTargets", entity.getSyncTargets());
+        }
+        metadata.put("syncStatus", resolveSyncStatus(entity.getSyncTargets(), entity.getSyncStatus()));
         if (isUrlContentType(contentType) && rawContent != null && !rawContent.isBlank()) {
           metadata.put("sourceUrl", rawContent);
         }
         RagUtility.ingestTextToChroma(contentToIngest, metadata, embeddingModel,
             knowledgeChatEmbeddingStore);
+        if (shouldSyncToTarget(entity.getSyncTargets(), SYNC_TARGET_FEISHU)) {
+          try {
+            FeishuSyncService.FeishuSyncResult feishuSyncResult =
+                feishuSyncService.syncMessage(entity, contentToIngest);
+            updateTargetSyncState(id, SYNC_TARGET_FEISHU, SYNC_STATUS_SYNCED, feishuSyncResult.syncedAt(),
+                feishuSyncResult.reference());
+          } catch (RuntimeException syncException) {
+            log.error("input message feishu sync failed, id={}", id, syncException);
+            updateTargetSyncState(id, SYNC_TARGET_FEISHU, SYNC_STATUS_FAILED, null,
+                buildTargetSyncFailureReference(syncException));
+          }
+        }
         updateStatus(id, STATUS_INGESTED);
       } catch (Exception e) {
         log.error("input message ingest failed, id={}", id, e);
@@ -417,7 +570,7 @@ public class InputMessageServiceImpl implements InputMessageService {
     if (entities.isEmpty()) {
       return ResultTool.fail(ResultCode.NO_PERMISSION);
     }
-    return ResultTool.success(entities.stream().map(InputMessageServiceImpl::toResponse)
+    return ResultTool.success(entities.stream().map(this::toResponse)
         .collect(Collectors.toList()));
   }
 
@@ -448,13 +601,24 @@ public class InputMessageServiceImpl implements InputMessageService {
       EmbeddingSearchResult<TextSegment> searchResult = RagUtility.searchByCreatedByAndSessionId(
           knowledgeChatEmbeddingStore, embeddingModel, inputMessageRecallParam.getQuery(), username,
           inputMessageRecallParam.getSessionId(), 5, 0.6);
-      List<InputMessageRecallItemResponse> result = searchResult.matches().stream()
+        List<InputMessageRecallItemResponse> result = searchResult.matches().stream()
           .map(match -> {
+            String contentType = match.embedded().metadata().getString("contentType");
+            String contentCategory = match.embedded().metadata().getString("contentCategory");
+            List<String> tags = inputContentAutoTagger.parseTags(match.embedded().metadata().getString("contentTags"));
+            if (contentCategory == null || contentCategory.isBlank()) {
+              contentCategory = inputContentAutoTagger.analyze(contentType, null, match.embedded().text()).category();
+            }
+            if (tags.isEmpty()) {
+              tags = inputContentAutoTagger.analyze(contentType, null, match.embedded().text()).tags();
+            }
             InputMessageRecallItemResponse item = new InputMessageRecallItemResponse();
             item.setText(match.embedded().text());
             item.setScore(match.score());
             item.setSessionId(match.embedded().metadata().getString("sessionId"));
             item.setDedupeKey(match.embedded().metadata().getString("dedupeKey"));
+            item.setCategory(contentCategory);
+            item.setTags(tags);
             return item;
           })
           .collect(Collectors.toList());

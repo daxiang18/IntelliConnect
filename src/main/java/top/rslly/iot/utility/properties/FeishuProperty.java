@@ -17,18 +17,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package top.rslly.iot.param.response;
+package top.rslly.iot.utility.properties;
 
 import lombok.Data;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.context.annotation.Configuration;
 
-import java.util.List;
-
+@Configuration
 @Data
-public class InputMessageRecallItemResponse {
-  private String text;
-  private double score;
-  private String sessionId;
-  private String dedupeKey;
-  private String category;
-  private List<String> tags;
+@ConfigurationProperties(prefix = "feishu")
+public class FeishuProperty {
+  private boolean enabled;
+  private String appId;
+  private String appSecret;
+  private String apiBaseUrl = "https://open.feishu.cn/open-apis";
+  private String mode = "doc";
+  private String folderToken;
+  private String wikiSpaceId;
+  private String wikiParentNodeToken;
+  private String titlePrefix = "IntelliConnect";
+  private String webBaseUrl;
 }

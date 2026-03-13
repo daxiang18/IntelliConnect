@@ -213,6 +213,18 @@ emq:
     key: XXX
     secret: XXX
 
+feishu:
+  enabled: ${FEISHU_ENABLED:false}
+  app-id: ${FEISHU_APP_ID:}
+  app-secret: ${FEISHU_APP_SECRET:}
+  api-base-url: ${FEISHU_API_BASE_URL:https://open.feishu.cn/open-apis}
+  mode: ${FEISHU_SYNC_MODE:doc}
+  folder-token: ${FEISHU_FOLDER_TOKEN:}
+  wiki-space-id: ${FEISHU_WIKI_SPACE_ID:}
+  wiki-parent-node-token: ${FEISHU_WIKI_PARENT_NODE_TOKEN:}
+  title-prefix: ${FEISHU_TITLE_PREFIX:IntelliConnect}
+  web-base-url: ${FEISHU_WEB_BASE_URL:}
+
 # ---- 域配置（个人中枢二开分域支持） ----
 hub:
   enabled: true

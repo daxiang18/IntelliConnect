@@ -64,4 +64,7 @@ public class InputMessageCreateParam {
   private String status;
 
   private Long receivedAt;
+
+  @Size(max = 128, message = "syncTargets 长度不能超过 128")
+  private String syncTargets;
 }

@@ -8,6 +8,7 @@ import dev.langchain4j.model.output.Response;
 import dev.langchain4j.store.embedding.EmbeddingMatch;
 import dev.langchain4j.store.embedding.EmbeddingSearchResult;
 import dev.langchain4j.store.embedding.EmbeddingStore;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,6 +22,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import top.rslly.iot.dao.InputMessageRepository;
 import top.rslly.iot.models.InputMessageEntity;
 import top.rslly.iot.param.request.AgentLongMemory;
+import top.rslly.iot.param.request.InputMessageCreateParam;
 import top.rslly.iot.param.request.InputMessagePromoteParam;
 import top.rslly.iot.param.request.InputMessageRecallParam;
 import top.rslly.iot.param.response.AgentLongMemoryResponse;
@@ -28,6 +30,7 @@ import top.rslly.iot.param.response.InputMessageRecallItemResponse;
 import top.rslly.iot.param.response.InputMessageResponse;
 import top.rslly.iot.services.agent.AgentLongMemoryServiceImpl;
 import top.rslly.iot.utility.JwtTokenUtil;
+import top.rslly.iot.utility.input.InputContentAutoTagger;
 import top.rslly.iot.utility.input.UrlContentNormalizer;
 import top.rslly.iot.utility.result.JsonResult;
 import top.rslly.iot.utility.result.ResultCode;
@@ -59,6 +62,8 @@ class InputMessageServiceImplTest {
   private AgentLongMemoryServiceImpl agentLongMemoryService;
   @Mock
   private UrlContentNormalizer urlContentNormalizer;
+  @Mock
+  private FeishuSyncService feishuSyncService;
   @InjectMocks
   private InputMessageServiceImpl inputMessageService;
 
@@ -70,6 +75,7 @@ class InputMessageServiceImplTest {
     ReflectionTestUtils.setField(jwtTokenUtil, "secretKey", SECRET);
     jwtTokenUtil.init();
     token = JwtTokenUtil.TOKEN_PREFIX + JwtTokenUtil.createToken("smoke-user", "[ROLE_admin]");
+    ReflectionTestUtils.setField(inputMessageService, "inputContentAutoTagger", new InputContentAutoTagger());
   }
 
   @Test
@@ -79,9 +85,12 @@ class InputMessageServiceImplTest {
     entity.setCreatedBy("smoke-user");
     entity.setSessionId("session-1");
     entity.setDedupeKey("dedupe-1");
-    entity.setNormalizedContent("hello world");
-    entity.setRawContent("hello world");
+    entity.setContentType("text");
+    entity.setNormalizedContent("明天修复登录 bug");
+    entity.setRawContent("明天修复登录 bug");
     entity.setStatus("received");
+    entity.setSyncTargets("github");
+    entity.setSyncStatus("pending");
 
     when(inputMessageRepository.findById(1L)).thenReturn(Optional.of(entity));
     when(inputMessageRepository.save(any(InputMessageEntity.class)))
@@ -98,7 +107,179 @@ class InputMessageServiceImplTest {
 
     Assertions.assertTrue(result.getSuccess());
     Assertions.assertEquals("ingested", entity.getStatus());
+    ArgumentCaptor<TextSegment> segmentCaptor = ArgumentCaptor.forClass(TextSegment.class);
+    verify(knowledgeChatEmbeddingStore).add(any(Embedding.class), segmentCaptor.capture());
+    Assertions.assertEquals("task", segmentCaptor.getValue().metadata().getString("contentCategory"));
+    Assertions.assertEquals("text,task,schedule,bugfix",
+        segmentCaptor.getValue().metadata().getString("contentTags"));
+    Assertions.assertEquals("github", segmentCaptor.getValue().metadata().getString("syncTargets"));
+    Assertions.assertEquals("pending", segmentCaptor.getValue().metadata().getString("syncStatus"));
+  }
+
+  @Test
+  void processMessageShouldSyncToFeishuAndUpdateSyncState() {
+    InputMessageEntity entity = new InputMessageEntity();
+    entity.setId(13L);
+    entity.setCreatedBy("smoke-user");
+    entity.setSessionId("session-feishu");
+    entity.setDedupeKey("dedupe-feishu");
+    entity.setContentType("text");
+    entity.setNormalizedContent("同步到飞书文档");
+    entity.setRawContent("同步到飞书文档");
+    entity.setStatus("received");
+    entity.setSyncTargets("feishu");
+    entity.setSyncStatus("pending");
+
+    when(inputMessageRepository.findById(13L)).thenReturn(Optional.of(entity));
+    when(inputMessageRepository.save(any(InputMessageEntity.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+    when(embeddingModel.embed(any(TextSegment.class)))
+        .thenReturn(Response.from(Embedding.from(new float[] {0.1f, 0.2f})));
+    when(feishuSyncService.syncMessage(any(InputMessageEntity.class), any(String.class)))
+        .thenReturn(new FeishuSyncService.FeishuSyncResult(1716000002000L,
+            Map.of("mode", "doc", "documentId", "docx-123")));
+    doAnswer(invocation -> {
+      Runnable runnable = invocation.getArgument(0);
+      runnable.run();
+      return null;
+    }).when(taskExecutor).execute(any(Runnable.class));
+
+    JsonResult<?> result = inputMessageService.processMessage(13L, token);
+
+    Assertions.assertTrue(result.getSuccess());
+    Assertions.assertEquals("ingested", entity.getStatus());
+    Assertions.assertEquals("synced", entity.getSyncStatus());
+    Assertions.assertEquals(Long.valueOf(1716000002000L), entity.getSyncedAt());
+    Assertions.assertNotNull(entity.getExternalReferencesJson());
+    Assertions.assertTrue(entity.getExternalReferencesJson().contains("\"documentId\":\"docx-123\""));
+    Assertions.assertTrue(entity.getExternalReferencesJson().contains("\"status\":\"synced\""));
+    verify(feishuSyncService).syncMessage(entity, "同步到飞书文档");
+  }
+
+  @Test
+  void processMessageShouldKeepPendingWhenOtherTargetsRemainUnsynced() {
+    InputMessageEntity entity = new InputMessageEntity();
+    entity.setId(14L);
+    entity.setCreatedBy("smoke-user");
+    entity.setSessionId("session-multi-sync");
+    entity.setDedupeKey("dedupe-multi-sync");
+    entity.setContentType("text");
+    entity.setNormalizedContent("同步到多个目标");
+    entity.setRawContent("同步到多个目标");
+    entity.setStatus("received");
+    entity.setSyncTargets("feishu,github");
+    entity.setSyncStatus("pending");
+
+    when(inputMessageRepository.findById(14L)).thenReturn(Optional.of(entity));
+    when(inputMessageRepository.save(any(InputMessageEntity.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+    when(embeddingModel.embed(any(TextSegment.class)))
+        .thenReturn(Response.from(Embedding.from(new float[] {0.1f, 0.2f})));
+    when(feishuSyncService.syncMessage(any(InputMessageEntity.class), any(String.class)))
+        .thenReturn(new FeishuSyncService.FeishuSyncResult(1716000003000L,
+            Map.of("mode", "doc", "documentId", "docx-456")));
+    doAnswer(invocation -> {
+      Runnable runnable = invocation.getArgument(0);
+      runnable.run();
+      return null;
+    }).when(taskExecutor).execute(any(Runnable.class));
+
+    JsonResult<?> result = inputMessageService.processMessage(14L, token);
+
+    Assertions.assertTrue(result.getSuccess());
+    Assertions.assertEquals("ingested", entity.getStatus());
+    Assertions.assertEquals("pending", entity.getSyncStatus());
+    Assertions.assertEquals(Long.valueOf(1716000003000L), entity.getSyncedAt());
+    Assertions.assertTrue(entity.getExternalReferencesJson().contains("\"documentId\":\"docx-456\""));
+    Assertions.assertTrue(entity.getExternalReferencesJson().contains("\"status\":\"synced\""));
+  }
+
+  @Test
+  void processMessageShouldKeepIngestedWhenFeishuSyncFails() {
+    InputMessageEntity entity = new InputMessageEntity();
+    entity.setId(15L);
+    entity.setCreatedBy("smoke-user");
+    entity.setSessionId("session-feishu-fail");
+    entity.setDedupeKey("dedupe-feishu-fail");
+    entity.setContentType("text");
+    entity.setNormalizedContent("同步到飞书失败");
+    entity.setRawContent("同步到飞书失败");
+    entity.setStatus("received");
+    entity.setSyncTargets("feishu");
+    entity.setSyncStatus("pending");
+
+    when(inputMessageRepository.findById(15L)).thenReturn(Optional.of(entity));
+    when(inputMessageRepository.save(any(InputMessageEntity.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+    when(embeddingModel.embed(any(TextSegment.class)))
+        .thenReturn(Response.from(Embedding.from(new float[] {0.1f, 0.2f})));
+    when(feishuSyncService.syncMessage(any(InputMessageEntity.class), any(String.class)))
+        .thenThrow(new IllegalStateException("Feishu appId/appSecret not configured"));
+    doAnswer(invocation -> {
+      Runnable runnable = invocation.getArgument(0);
+      runnable.run();
+      return null;
+    }).when(taskExecutor).execute(any(Runnable.class));
+
+    JsonResult<?> result = inputMessageService.processMessage(15L, token);
+
+    Assertions.assertTrue(result.getSuccess());
+    Assertions.assertEquals("ingested", entity.getStatus());
+    Assertions.assertEquals("failed", entity.getSyncStatus());
+    Assertions.assertNull(entity.getSyncedAt());
+    Assertions.assertNotNull(entity.getExternalReferencesJson());
+    Assertions.assertTrue(entity.getExternalReferencesJson().contains("\"errorMessage\":\"Feishu appId/appSecret not configured\""));
     verify(knowledgeChatEmbeddingStore).add(any(Embedding.class), any(TextSegment.class));
+  }
+
+  @Test
+  void createMessageShouldNormalizeSyncTargetsAndSetPendingStatus() {
+    InputMessageCreateParam param = new InputMessageCreateParam();
+    param.setSourceType("manual");
+    param.setSourceAccountId("acc-1");
+    param.setSessionId("session-create");
+    param.setSenderId("sender-1");
+    param.setContentType("text");
+    param.setRawContent("准备同步到多个平台");
+    param.setNormalizedContent("准备同步到多个平台");
+    param.setDedupeKey("dedupe-create");
+    param.setSyncTargets("GitHub, feishu, github");
+
+    when(inputMessageRepository.findFirstByDedupeKey("dedupe-create")).thenReturn(Optional.empty());
+    when(inputMessageRepository.save(any(InputMessageEntity.class)))
+        .thenAnswer(invocation -> {
+          InputMessageEntity entity = invocation.getArgument(0);
+          entity.setId(20L);
+          return entity;
+        });
+
+    JsonResult<?> result = inputMessageService.createMessage(param, token);
+
+    Assertions.assertTrue(result.getSuccess());
+    InputMessageEntity entity = (InputMessageEntity) result.getData();
+    Assertions.assertEquals("github,feishu", entity.getSyncTargets());
+    Assertions.assertEquals("pending", entity.getSyncStatus());
+    Assertions.assertNull(entity.getSyncedAt());
+    Assertions.assertNull(entity.getExternalReferencesJson());
+  }
+
+  @Test
+  void createMessageShouldRejectUnsupportedSyncTarget() {
+    InputMessageCreateParam param = new InputMessageCreateParam();
+    param.setSourceType("manual");
+    param.setSessionId("session-create");
+    param.setContentType("text");
+    param.setRawContent("准备同步到未知平台");
+    param.setDedupeKey("dedupe-invalid-sync");
+    param.setSyncTargets("github,notion");
+
+    when(inputMessageRepository.findFirstByDedupeKey("dedupe-invalid-sync")).thenReturn(Optional.empty());
+
+    JsonResult<?> result = inputMessageService.createMessage(param, token);
+
+    Assertions.assertFalse(result.getSuccess());
+    Assertions.assertEquals(ResultCode.PARAM_NOT_VALID.getCode(), result.getErrorCode());
+    verify(inputMessageRepository, never()).save(any(InputMessageEntity.class));
   }
 
   @Test
@@ -134,7 +315,11 @@ class InputMessageServiceImplTest {
     Assertions.assertEquals("ingested", entity.getStatus());
     Assertions.assertTrue(entity.getNormalizedContent().contains("# Example Article"));
     verify(urlContentNormalizer).normalize("https://example.com/article");
-    verify(knowledgeChatEmbeddingStore).add(any(Embedding.class), any(TextSegment.class));
+    ArgumentCaptor<TextSegment> segmentCaptor = ArgumentCaptor.forClass(TextSegment.class);
+    verify(knowledgeChatEmbeddingStore).add(any(Embedding.class), segmentCaptor.capture());
+    Assertions.assertEquals("reference", segmentCaptor.getValue().metadata().getString("contentCategory"));
+    Assertions.assertEquals("url,example.com,reference",
+        segmentCaptor.getValue().metadata().getString("contentTags"));
   }
 
   @Test
@@ -166,7 +351,11 @@ class InputMessageServiceImplTest {
     EmbeddingMatch<TextSegment> match = (EmbeddingMatch<TextSegment>) org.mockito.Mockito.mock(
         EmbeddingMatch.class);
     TextSegment segment = TextSegment.from("hello world",
-        Metadata.from(Map.of("sessionId", "session-1", "dedupeKey", "dedupe-1")));
+        Metadata.from(Map.of(
+            "sessionId", "session-1",
+            "dedupeKey", "dedupe-1",
+            "contentCategory", "knowledge",
+            "contentTags", "text,knowledge")));
 
     when(embeddingModel.embed("hello"))
         .thenReturn(Response.from(Embedding.from(new float[] {0.1f, 0.2f})));
@@ -184,6 +373,8 @@ class InputMessageServiceImplTest {
     Assertions.assertEquals("hello world", data.get(0).getText());
     Assertions.assertEquals("session-1", data.get(0).getSessionId());
     Assertions.assertEquals("dedupe-1", data.get(0).getDedupeKey());
+    Assertions.assertEquals("knowledge", data.get(0).getCategory());
+    Assertions.assertEquals(List.of("text", "knowledge"), data.get(0).getTags());
     verify(knowledgeChatEmbeddingStore).search(any());
   }
 
@@ -393,10 +584,16 @@ class InputMessageServiceImplTest {
     InputMessageEntity entity = new InputMessageEntity();
     entity.setId(10L);
     entity.setCreatedBy("smoke-user");
+    entity.setContentType("text");
     entity.setDedupeKey("dedupe-test");
     entity.setSessionId("session-x");
+    entity.setNormalizedContent("明天安排验收任务");
     entity.setStatus("received");
     entity.setReceivedAt(1716000000000L);
+    entity.setSyncTargets("feishu,github");
+    entity.setSyncStatus("pending");
+    entity.setSyncedAt(1716000001000L);
+    entity.setExternalReferencesJson("{\"github\":{\"issueUrl\":\"https://github.com/demo/issues/1\"}}");
 
     when(inputMessageRepository.findFirstByDedupeKeyAndCreatedBy("dedupe-test", "smoke-user"))
         .thenReturn(Optional.of(entity));
@@ -409,6 +606,13 @@ class InputMessageServiceImplTest {
     Assertions.assertEquals("dedupe-test", dto.getDedupeKey());
     Assertions.assertEquals("session-x", dto.getSessionId());
     Assertions.assertEquals("received", dto.getStatus());
+    Assertions.assertEquals("task", dto.getCategory());
+    Assertions.assertTrue(dto.getTags().contains("task"));
+    Assertions.assertEquals(List.of("feishu", "github"), dto.getSyncTargets());
+    Assertions.assertEquals("pending", dto.getSyncStatus());
+    Assertions.assertEquals(Long.valueOf(1716000001000L), dto.getSyncedAt());
+    Assertions.assertEquals("{\"github\":{\"issueUrl\":\"https://github.com/demo/issues/1\"}}",
+        dto.getExternalReferencesJson());
   }
 
   @Test
@@ -436,6 +640,8 @@ class InputMessageServiceImplTest {
     Assertions.assertEquals(2, dtos.size());
     Assertions.assertEquals(11L, dtos.get(0).getId());
     Assertions.assertEquals("ingested", dtos.get(0).getStatus());
+    Assertions.assertTrue(dtos.get(0).getSyncTargets().isEmpty());
+    Assertions.assertEquals("not_requested", dtos.get(0).getSyncStatus());
     Assertions.assertEquals(12L, dtos.get(1).getId());
     Assertions.assertEquals("received", dtos.get(1).getStatus());
   }

@@ -21,6 +21,8 @@ package top.rslly.iot.param.response;
 
 import lombok.Data;
 
+import java.util.List;
+
 @Data
 public class InputMessageResponse {
   private long id;
@@ -35,4 +37,10 @@ public class InputMessageResponse {
   private String dedupeKey;
   private String status;
   private long receivedAt;
+  private List<String> syncTargets;
+  private String syncStatus;
+  private Long syncedAt;
+  private String externalReferencesJson;
+  private String category;
+  private List<String> tags;
 }

@@ -1,0 +1,41 @@
+services:
+  redis-smoke:
+    image: ${SMOKE_REDIS_IMAGE:-redis:6.2.17}
+    container_name: IntelliConnect-smoke-redis
+    ports:
+      - "${SMOKE_REDIS_PORT:-16380}:6379"
+    command: redis-server --requirepass ${SMOKE_REDIS_PASSWORD:-1234} --appendonly yes
+    volumes:
+      - "redis-smoke-volume:/data"
+    environment:
+      - TZ=Asia/Shanghai
+
+  mysql-smoke:
+    image: ${SMOKE_MYSQL_IMAGE:-mysql:8.0}
+    container_name: IntelliConnect-smoke-mysql
+    ports:
+      - "${SMOKE_MYSQL_PORT:-13306}:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=${SMOKE_MYSQL_PASSWORD:-change-me}
+      - MYSQL_DATABASE=cwliot1.8
+      - TZ=Asia/Shanghai
+    command: [ "--default-authentication-plugin=mysql_native_password" ]
+    volumes:
+      - "mysql-smoke-volume:/var/lib/mysql"
+
+  chromadb-smoke:
+    image: ${SMOKE_CHROMA_IMAGE:-chromadb/chroma:0.4.24}
+    container_name: IntelliConnect-smoke-chromadb
+    ports:
+      - "${SMOKE_CHROMA_PORT:-18000}:8000"
+    volumes:
+      - "chromadb-smoke-volume:/chroma/chroma"
+    environment:
+      - TZ=Asia/Shanghai
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/chroma/chroma
+
+volumes:
+  mysql-smoke-volume:
+  redis-smoke-volume:
+  chromadb-smoke-volume:

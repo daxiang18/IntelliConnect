@@ -38,6 +38,10 @@ public class InputMessageEntity {
   private String status;
   private long receivedAt;
   private String createdBy;
+  private String syncTargets;
+  private String syncStatus;
+  private Long syncedAt;
+  private String externalReferencesJson;
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -170,6 +174,46 @@ public class InputMessageEntity {
     this.createdBy = createdBy;
   }
 
+  @Basic
+  @Column(name = "sync_targets")
+  public String getSyncTargets() {
+    return syncTargets;
+  }
+
+  public void setSyncTargets(String syncTargets) {
+    this.syncTargets = syncTargets;
+  }
+
+  @Basic
+  @Column(name = "sync_status")
+  public String getSyncStatus() {
+    return syncStatus;
+  }
+
+  public void setSyncStatus(String syncStatus) {
+    this.syncStatus = syncStatus;
+  }
+
+  @Basic
+  @Column(name = "synced_at")
+  public Long getSyncedAt() {
+    return syncedAt;
+  }
+
+  public void setSyncedAt(Long syncedAt) {
+    this.syncedAt = syncedAt;
+  }
+
+  @Basic
+  @Column(name = "external_references_json", columnDefinition = "TEXT")
+  public String getExternalReferencesJson() {
+    return externalReferencesJson;
+  }
+
+  public void setExternalReferencesJson(String externalReferencesJson) {
+    this.externalReferencesJson = externalReferencesJson;
+  }
+
   @Override
   public boolean equals(Object o) {
     if (this == o)
@@ -184,12 +228,17 @@ public class InputMessageEntity {
         && Objects.equals(normalizedContent, that.normalizedContent)
         && Objects.equals(attachmentsJson, that.attachmentsJson)
         && Objects.equals(dedupeKey, that.dedupeKey) && Objects.equals(status, that.status)
-        && Objects.equals(createdBy, that.createdBy);
+        && Objects.equals(createdBy, that.createdBy)
+        && Objects.equals(syncTargets, that.syncTargets)
+        && Objects.equals(syncStatus, that.syncStatus)
+        && Objects.equals(syncedAt, that.syncedAt)
+        && Objects.equals(externalReferencesJson, that.externalReferencesJson);
   }
 
   @Override
   public int hashCode() {
     return Objects.hash(id, sourceType, sourceAccountId, sessionId, senderId, contentType, rawContent,
-        normalizedContent, attachmentsJson, dedupeKey, status, receivedAt, createdBy);
+        normalizedContent, attachmentsJson, dedupeKey, status, receivedAt, createdBy, syncTargets,
+        syncStatus, syncedAt, externalReferencesJson);
   }
 }

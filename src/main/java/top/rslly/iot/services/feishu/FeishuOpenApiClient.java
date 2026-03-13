@@ -17,18 +17,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package top.rslly.iot.param.response;
+package top.rslly.iot.services.feishu;
 
-import lombok.Data;
+public interface FeishuOpenApiClient {
+  String getTenantAccessToken(String appId, String appSecret);
 
-import java.util.List;
+  FeishuDocument createDocument(String tenantAccessToken, String title, String folderToken);
 
-@Data
-public class InputMessageRecallItemResponse {
-  private String text;
-  private double score;
-  private String sessionId;
-  private String dedupeKey;
-  private String category;
-  private List<String> tags;
+  void appendDocumentContent(String tenantAccessToken, String documentId, String content);
+
+  FeishuWikiNode createWikiNode(String tenantAccessToken, String spaceId, String parentNodeToken,
+      String title, String documentId);
+
+  record FeishuDocument(String documentId, String title) {
+  }
+
+  record FeishuWikiNode(String spaceId, String nodeToken, String title) {
+  }
 }

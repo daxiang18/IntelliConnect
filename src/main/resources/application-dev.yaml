@@ -1,0 +1,12 @@
+hub:
+  enabled: true
+  default-entry: /home
+  menu-group: hub
+
+iot:
+  enabled: false
+  require-mqtt: false
+  require-influx: false
+  require-ota: false
+  default-entry: /product
+  menu-group: iot

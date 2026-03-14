@@ -29,6 +29,7 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import top.rslly.iot.utility.properties.FeishuProperty;
 
@@ -41,6 +42,7 @@ import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Component
+@ConditionalOnProperty(prefix = "feishu", name = "enabled", havingValue = "true")
 public class HttpFeishuOpenApiClient implements FeishuOpenApiClient {
   private static final MediaType JSON_MEDIA_TYPE = MediaType.get("application/json; charset=utf-8");
   private static final int MAX_BLOCK_TEXT_LENGTH = 1000;

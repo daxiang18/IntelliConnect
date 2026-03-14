@@ -20,6 +20,7 @@
 package top.rslly.iot.services;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import top.rslly.iot.models.InputMessageEntity;
 import top.rslly.iot.services.feishu.FeishuOpenApiClient;
@@ -32,6 +33,7 @@ import java.util.Map;
 
 @Service
 @Slf4j
+@ConditionalOnProperty(prefix = "feishu", name = "enabled", havingValue = "true")
 public class FeishuSyncService {
   private static final String MODE_DOC = "doc";
   private static final String MODE_WIKI = "wiki";

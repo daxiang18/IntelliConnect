@@ -48,6 +48,7 @@ import top.rslly.iot.services.agent.AiService;
 import top.rslly.iot.utility.input.InputContentAutoTagger;
 import top.rslly.iot.utility.JwtTokenUtil;
 import top.rslly.iot.utility.ai.rag.RagUtility;
+import top.rslly.iot.utility.ai.voice.ASR.AsrServiceFactory;
 import top.rslly.iot.utility.input.UrlContentNormalizer;
 import top.rslly.iot.utility.result.JsonResult;
 import top.rslly.iot.utility.result.ResultCode;
@@ -115,8 +116,10 @@ public class InputMessageServiceImpl implements InputMessageService {
   private UrlContentNormalizer urlContentNormalizer;
   @Autowired
   private InputContentAutoTagger inputContentAutoTagger;
-  @Autowired
+  @Autowired(required = false)
   private FeishuSyncService feishuSyncService;
+  @Autowired
+  private AsrServiceFactory asrServiceFactory;
   @Autowired
   private Validator validator;
 
@@ -194,13 +197,30 @@ public class InputMessageServiceImpl implements InputMessageService {
     });
   }
 
+  private void updateStatusIfAttemptMatches(long id, String status, String expectedAttemptToken) {
+    inputMessageRepository.findById(id).ifPresent(entity -> {
+      if (expectedAttemptToken != null
+          && !expectedAttemptToken.equals(entity.getProcessingAttemptToken())) {
+        log.warn(
+            "stale attempt discarded, skipping status finalization, id={}, expectedToken={}, currentToken={}",
+            id, expectedAttemptToken, entity.getProcessingAttemptToken());
+        return;
+      }
+      applyStatus(entity, status, null);
+      inputMessageRepository.save(entity);
+    });
+  }
+
   private void applyStatus(InputMessageEntity entity, String status, Long processingStartedAt) {
     entity.setStatus(status);
     if (STATUS_PROCESSING.equals(status)) {
       entity.setProcessingStartedAt(processingStartedAt == null ? System.currentTimeMillis() : processingStartedAt);
+      entity.setProcessingAttemptToken(UUID.randomUUID().toString());
+      entity.setProcessingAttemptCount(entity.getProcessingAttemptCount() + 1);
       return;
     }
     entity.setProcessingStartedAt(null);
+    entity.setProcessingAttemptToken(null);
   }
 
   private String resolvePromotedMemoryValue(InputMessageEntity entity, InputMessagePromoteParam param) {
@@ -305,6 +325,37 @@ public class InputMessageServiceImpl implements InputMessageService {
     log.info("image content enriched, messageId={}, dedupeKey={}, sessionId={}, contentLength={}",
         entity.getId(), entity.getDedupeKey(), entity.getSessionId(), enrichedContent.length());
     return enrichedContent;
+  }
+
+  private String resolveVoiceContentForIngest(InputMessageEntity entity) {
+    String audioUrl = entity.getRawContent();
+    String existingTranscript = entity.getNormalizedContent();
+
+    // Upstream already provided a distinct transcript — preserve it without re-transcribing.
+    boolean hasDistinctTranscript = existingTranscript != null && !existingTranscript.isBlank()
+        && !existingTranscript.equals(audioUrl);
+    if (hasDistinctTranscript) {
+      return existingTranscript;
+    }
+
+    if (audioUrl == null || audioUrl.isBlank()) {
+      log.warn("voice transcription skipped: no audio URL, messageId={}, dedupeKey={}, sessionId={}",
+          entity.getId(), entity.getDedupeKey(), entity.getSessionId());
+      return existingTranscript != null && !existingTranscript.isBlank() ? existingTranscript : audioUrl;
+    }
+
+    String transcript = asrServiceFactory.getService().getText(audioUrl);
+    if (transcript == null || transcript.isBlank()) {
+      log.warn("voice transcription returned blank, falling back to audioUrl, messageId={}, dedupeKey={}, sessionId={}",
+          entity.getId(), entity.getDedupeKey(), entity.getSessionId());
+      return audioUrl;
+    }
+
+    entity.setNormalizedContent(transcript);
+    inputMessageRepository.save(entity);
+    log.info("voice content transcribed in-pipeline, messageId={}, dedupeKey={}, sessionId={}, transcriptLength={}",
+        entity.getId(), entity.getDedupeKey(), entity.getSessionId(), transcript.length());
+    return transcript;
   }
 
   private InputContentAutoTagger.AutoTagResult resolveAutoTagResult(String contentType, String rawContent,
@@ -432,6 +483,7 @@ public class InputMessageServiceImpl implements InputMessageService {
     response.setExternalReferencesJson(entity.getExternalReferencesJson());
     response.setCategory(autoTagResult.category());
     response.setTags(autoTagResult.tags());
+    response.setProcessingAttemptCount(entity.getProcessingAttemptCount());
     return response;
   }
 
@@ -549,20 +601,23 @@ public class InputMessageServiceImpl implements InputMessageService {
     String contentType = entity.getContentType();
     String rawContent = entity.getRawContent();
     String syncTargets = entity.getSyncTargets();
+    String attemptToken = savedEntity.getProcessingAttemptToken();
 
     log.info(
-        "input message processing queued, id={}, dedupeKey={}, sessionId={}, contentType={}, syncTargets={}, processingStartedAt={}, user={}",
-        id, dedupeKey, sessionId, contentType, syncTargets, processingStartedAt, username);
+        "input message processing queued, id={}, dedupeKey={}, sessionId={}, contentType={}, syncTargets={}, processingStartedAt={}, attemptToken={}, user={}",
+        id, dedupeKey, sessionId, contentType, syncTargets, processingStartedAt, attemptToken, username);
 
     taskExecutor.execute(() -> {
-      log.info("input message processing started, id={}, dedupeKey={}, sessionId={}, contentType={}, processingStartedAt={}",
-          id, dedupeKey, sessionId, contentType, processingStartedAt);
+      log.info("input message processing started, id={}, dedupeKey={}, sessionId={}, contentType={}, processingStartedAt={}, attemptToken={}",
+          id, dedupeKey, sessionId, contentType, processingStartedAt, attemptToken);
       try {
         String contentToIngest;
         if (isUrlContentType(contentType)) {
           contentToIngest = resolveUrlContentForIngest(entity);
         } else if (CONTENT_TYPE_IMAGE.equalsIgnoreCase(contentType)) {
           contentToIngest = resolveImageContentForIngest(entity);
+        } else if (CONTENT_TYPE_VOICE.equalsIgnoreCase(contentType)) {
+          contentToIngest = resolveVoiceContentForIngest(entity);
         } else {
           contentToIngest = entity.getNormalizedContent();
         }
@@ -591,7 +646,7 @@ public class InputMessageServiceImpl implements InputMessageService {
         }
         RagUtility.ingestTextToChroma(contentToIngest, metadata, embeddingModel,
             knowledgeChatEmbeddingStore);
-        if (shouldSyncToTarget(entity.getSyncTargets(), SYNC_TARGET_FEISHU)) {
+        if (feishuSyncService != null && shouldSyncToTarget(entity.getSyncTargets(), SYNC_TARGET_FEISHU)) {
           try {
             log.info("input message Feishu sync starting, id={}, dedupeKey={}, sessionId={}", id, dedupeKey,
                 sessionId);
@@ -611,14 +666,14 @@ public class InputMessageServiceImpl implements InputMessageService {
                 buildTargetSyncFailureReference(syncException));
           }
         }
-        updateStatus(id, STATUS_INGESTED);
+        updateStatusIfAttemptMatches(id, STATUS_INGESTED, attemptToken);
         log.info("input message processing completed, id={}, dedupeKey={}, sessionId={}, contentType={}, finalStatus={}",
             id, dedupeKey, sessionId, contentType, STATUS_INGESTED);
       } catch (Exception e) {
         log.error(
             "input message processing failed, id={}, dedupeKey={}, sessionId={}, contentType={}, syncTargets={}, finalStatus={}",
             id, dedupeKey, sessionId, contentType, syncTargets, STATUS_FAILED, e);
-        updateStatus(id, STATUS_FAILED);
+        updateStatusIfAttemptMatches(id, STATUS_FAILED, attemptToken);
       }
     });
 

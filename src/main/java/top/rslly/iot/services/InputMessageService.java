@@ -31,7 +31,11 @@ public interface InputMessageService {
 
   JsonResult<?> getMessagesBySessionId(String sessionId, String token);
 
+  JsonResult<?> getMessagesBySessionId(String sessionId, Integer page, Integer size, String token);
+
   JsonResult<?> processMessage(long id, String token);
+
+  JsonResult<?> retryMessage(long id, String token);
 
   JsonResult<?> recallMessages(InputMessageRecallParam inputMessageRecallParam, String token);
 

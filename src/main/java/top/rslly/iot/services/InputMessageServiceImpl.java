@@ -26,6 +26,9 @@ import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.model.embedding.EmbeddingModel;
 import dev.langchain4j.store.embedding.EmbeddingStore;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.task.TaskExecutor;
@@ -50,6 +53,9 @@ import top.rslly.iot.utility.result.ResultCode;
 import top.rslly.iot.utility.result.ResultTool;
 
 import jakarta.annotation.Resource;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validator;
+import java.net.URI;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -73,16 +79,18 @@ public class InputMessageServiceImpl implements InputMessageService {
   private static final String CONTENT_TYPE_VOICE = "voice";
   private static final String CONTENT_TYPE_URL = "url";
   private static final String SYNC_TARGET_FEISHU = "feishu";
-  private static final String SYNC_TARGET_GITHUB = "github";
   private static final String SYNC_STATUS_NOT_REQUESTED = "not_requested";
   private static final String SYNC_STATUS_PENDING = "pending";
   private static final String SYNC_STATUS_SYNCED = "synced";
   private static final String SYNC_STATUS_FAILED = "failed";
+  private static final int DEFAULT_SESSION_QUERY_PAGE = 0;
+  private static final int DEFAULT_SESSION_QUERY_SIZE = 50;
+  private static final int MAX_SESSION_QUERY_SIZE = 100;
   private static final String WECHAT_IMAGE_ATTACHMENT_NAME = "image";
   private static final String WECHAT_VOICE_ATTACHMENT_NAME = "voice";
   private static final String WECHAT_IMAGE_MIME_TYPE = "image/jpeg";
   private static final String WECHAT_VOICE_MIME_TYPE = "audio/amr";
-  private static final Set<String> SUPPORTED_SYNC_TARGETS = Set.of(SYNC_TARGET_FEISHU, SYNC_TARGET_GITHUB);
+  private static final Set<String> SUPPORTED_SYNC_TARGETS = Set.of(SYNC_TARGET_FEISHU);
 
   @Resource
   private InputMessageRepository inputMessageRepository;
@@ -101,10 +109,74 @@ public class InputMessageServiceImpl implements InputMessageService {
   private InputContentAutoTagger inputContentAutoTagger;
   @Autowired
   private FeishuSyncService feishuSyncService;
+  @Autowired
+  private Validator validator;
 
   private String resolveUsername(String token) {
     String tokenDeal = token.replace(JwtTokenUtil.TOKEN_PREFIX, "");
     return JwtTokenUtil.getUsername(tokenDeal);
+  }
+
+  private String resolveExceptionMessage(Exception exception) {
+    if (exception == null || exception.getMessage() == null || exception.getMessage().isBlank()) {
+      return exception == null ? "" : exception.getClass().getSimpleName();
+    }
+    return exception.getMessage();
+  }
+
+  private String describeConstraintViolations(List<String> violations) {
+    return violations.stream()
+        .sorted()
+        .collect(Collectors.joining("; "));
+  }
+
+  private String describeConstraintViolations(
+      java.util.Set<ConstraintViolation<InputMessageCreateParam>> violations) {
+    return describeConstraintViolations(violations.stream()
+        .map(violation -> {
+          String propertyPath = violation.getPropertyPath() == null ? "" : violation.getPropertyPath().toString();
+          return (propertyPath == null || propertyPath.isBlank() ? "request" : propertyPath)
+              + ": " + violation.getMessage();
+        })
+        .collect(Collectors.toList()));
+  }
+
+  private boolean isValidAttachmentUrl(String url) {
+    if (url == null || url.isBlank()) {
+      return false;
+    }
+    try {
+      URI attachmentUri = new URI(url.trim());
+      String scheme = attachmentUri.getScheme();
+      String host = attachmentUri.getHost();
+      return scheme != null
+          && ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))
+          && host != null && !host.isBlank();
+    } catch (Exception ex) {
+      return false;
+    }
+  }
+
+  private String validateCreateMessagePayload(InputMessageCreateParam inputMessageCreateParam) {
+    if (inputMessageCreateParam == null) {
+      return "request body is null";
+    }
+    var violations = validator.validate(inputMessageCreateParam);
+    if (!violations.isEmpty()) {
+      return describeConstraintViolations(violations);
+    }
+    List<InputAttachmentParam> attachments = inputMessageCreateParam.getAttachments();
+    if (attachments == null) {
+      return null;
+    }
+    List<String> manualValidationErrors = new java.util.ArrayList<>();
+    for (int index = 0; index < attachments.size(); index++) {
+      InputAttachmentParam attachment = attachments.get(index);
+      if (attachment != null && !isValidAttachmentUrl(attachment.getUrl())) {
+        manualValidationErrors.add("attachments[" + index + "].url: 必须是可解析的 http/https 地址");
+      }
+    }
+    return manualValidationErrors.isEmpty() ? null : describeConstraintViolations(manualValidationErrors);
   }
 
   private void updateStatus(long id, String status) {
@@ -139,8 +211,15 @@ public class InputMessageServiceImpl implements InputMessageService {
     }
     entity.setNormalizedContent(normalizedContent);
     inputMessageRepository.save(entity);
+    if (normalizedResult.success()) {
+      log.info(
+          "url content normalized, messageId={}, dedupeKey={}, sessionId={}, sourceUrl={}, title={}, contentLength={}",
+          entity.getId(), entity.getDedupeKey(), entity.getSessionId(), entity.getRawContent(),
+          normalizedResult.title(), normalizedContent == null ? 0 : normalizedContent.length());
+    }
     if (!normalizedResult.success()) {
-      log.warn("url content normalization failed, messageId={}, reason={}", entity.getId(),
+      log.warn("url content normalization failed, messageId={}, dedupeKey={}, sessionId={}, sourceUrl={}, reason={}",
+          entity.getId(), entity.getDedupeKey(), entity.getSessionId(), entity.getRawContent(),
           normalizedResult.failureReason());
     }
     return normalizedContent;
@@ -268,20 +347,50 @@ public class InputMessageServiceImpl implements InputMessageService {
 
   private JsonResult<?> createMessageForUsername(InputMessageCreateParam inputMessageCreateParam,
       String username) {
+    if (inputMessageCreateParam == null || inputMessageCreateParam.getDedupeKey() == null
+        || inputMessageCreateParam.getDedupeKey().isBlank()) {
+      log.warn(
+          "create input message failed, dedupeKey={}, sessionId={}, contentType={}, syncTargets={}, reason=invalid_payload, errorMessage={}",
+          inputMessageCreateParam == null ? null : inputMessageCreateParam.getDedupeKey(),
+          inputMessageCreateParam == null ? null : inputMessageCreateParam.getSessionId(),
+          inputMessageCreateParam == null ? null : inputMessageCreateParam.getContentType(),
+          inputMessageCreateParam == null ? null : inputMessageCreateParam.getSyncTargets(),
+          inputMessageCreateParam == null ? "request body is null" : "dedupeKey 不能为空");
+      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
+    }
     var existing = inputMessageRepository.findFirstByDedupeKey(inputMessageCreateParam.getDedupeKey());
     if (existing.isPresent()) {
       if (!username.equals(existing.get().getCreatedBy())) {
+        log.warn(
+            "input message create rejected, dedupeKey={}, sessionId={}, contentType={}, requestedBy={}, reason=dedupe_key_owned_by_other_user, existingMessageId={}",
+            inputMessageCreateParam.getDedupeKey(), inputMessageCreateParam.getSessionId(),
+            inputMessageCreateParam.getContentType(), username, existing.get().getId());
         return ResultTool.fail(ResultCode.NO_PERMISSION);
       }
+      log.info("input message dedupe hit, dedupeKey={}, user={}, messageId={}",
+          inputMessageCreateParam.getDedupeKey(), username, existing.get().getId());
       return ResultTool.success(existing.get());
+    }
+
+    String payloadValidationError = validateCreateMessagePayload(inputMessageCreateParam);
+    if (payloadValidationError != null) {
+      log.warn(
+          "create input message failed, dedupeKey={}, sessionId={}, contentType={}, syncTargets={}, reason=invalid_payload, errorMessage={}",
+          inputMessageCreateParam.getDedupeKey(), inputMessageCreateParam.getSessionId(),
+          inputMessageCreateParam.getContentType(), inputMessageCreateParam.getSyncTargets(),
+          payloadValidationError);
+      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
     }
 
     String normalizedSyncTargets;
     try {
       normalizedSyncTargets = normalizeSyncTargets(inputMessageCreateParam.getSyncTargets());
     } catch (IllegalArgumentException ex) {
-      log.warn("create input message failed, unsupported sync target, dedupeKey={}",
-          inputMessageCreateParam.getDedupeKey(), ex);
+      log.warn(
+          "create input message failed, dedupeKey={}, sessionId={}, contentType={}, syncTargets={}, reason=unsupported_sync_target, errorMessage={}",
+          inputMessageCreateParam.getDedupeKey(), inputMessageCreateParam.getSessionId(),
+          inputMessageCreateParam.getContentType(), inputMessageCreateParam.getSyncTargets(),
+          resolveExceptionMessage(ex));
       return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
     }
 
@@ -310,7 +419,11 @@ public class InputMessageServiceImpl implements InputMessageService {
     entity.setSyncedAt(null);
     entity.setExternalReferencesJson(null);
 
-    return ResultTool.success(inputMessageRepository.save(entity));
+    InputMessageEntity savedEntity = inputMessageRepository.save(entity);
+    log.info("input message created, id={}, dedupeKey={}, sessionId={}, contentType={}, syncTargets={}, user={}",
+        savedEntity.getId(), savedEntity.getDedupeKey(), savedEntity.getSessionId(), savedEntity.getContentType(),
+        savedEntity.getSyncTargets(), username);
+    return ResultTool.success(savedEntity);
   }
 
   private JsonResult<?> processMessageForUsername(long id, String username) {
@@ -329,6 +442,10 @@ public class InputMessageServiceImpl implements InputMessageService {
       normalizedContent = entity.getRawContent();
     }
     if (normalizedContent == null || normalizedContent.isBlank()) {
+      log.warn(
+          "input message processing rejected, messageId={}, dedupeKey={}, sessionId={}, contentType={}, syncTargets={}, reason=blank_content",
+          entity.getId(), entity.getDedupeKey(), entity.getSessionId(), entity.getContentType(),
+          entity.getSyncTargets());
       return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
     }
 
@@ -339,8 +456,14 @@ public class InputMessageServiceImpl implements InputMessageService {
     String createdBy = entity.getCreatedBy();
     String contentType = entity.getContentType();
     String rawContent = entity.getRawContent();
+    String syncTargets = entity.getSyncTargets();
+
+    log.info("input message processing queued, id={}, dedupeKey={}, sessionId={}, contentType={}, syncTargets={}, user={}",
+        id, dedupeKey, sessionId, contentType, syncTargets, username);
 
     taskExecutor.execute(() -> {
+      log.info("input message processing started, id={}, dedupeKey={}, sessionId={}, contentType={}", id,
+          dedupeKey, sessionId, contentType);
       try {
         String contentToIngest = isUrlContentType(contentType)
             ? resolveUrlContentForIngest(entity)
@@ -372,19 +495,31 @@ public class InputMessageServiceImpl implements InputMessageService {
             knowledgeChatEmbeddingStore);
         if (shouldSyncToTarget(entity.getSyncTargets(), SYNC_TARGET_FEISHU)) {
           try {
+            log.info("input message Feishu sync starting, id={}, dedupeKey={}, sessionId={}", id, dedupeKey,
+                sessionId);
             FeishuSyncService.FeishuSyncResult feishuSyncResult =
                 feishuSyncService.syncMessage(entity, contentToIngest);
             updateTargetSyncState(id, SYNC_TARGET_FEISHU, SYNC_STATUS_SYNCED, feishuSyncResult.syncedAt(),
                 feishuSyncResult.reference());
+            log.info("input message Feishu sync succeeded, id={}, dedupeKey={}, mode={}, documentId={}", id,
+                dedupeKey, feishuSyncResult.reference().get("mode"),
+                feishuSyncResult.reference().get("documentId"));
           } catch (RuntimeException syncException) {
-            log.error("input message feishu sync failed, id={}", id, syncException);
+            log.error(
+                "input message feishu sync failed, id={}, dedupeKey={}, sessionId={}, target={}, syncTargets={}, errorType={}, errorMessage={}",
+                id, dedupeKey, sessionId, SYNC_TARGET_FEISHU, syncTargets, syncException.getClass().getSimpleName(),
+                resolveExceptionMessage(syncException), syncException);
             updateTargetSyncState(id, SYNC_TARGET_FEISHU, SYNC_STATUS_FAILED, null,
                 buildTargetSyncFailureReference(syncException));
           }
         }
         updateStatus(id, STATUS_INGESTED);
+        log.info("input message processing completed, id={}, dedupeKey={}, sessionId={}, contentType={}, finalStatus={}",
+            id, dedupeKey, sessionId, contentType, STATUS_INGESTED);
       } catch (Exception e) {
-        log.error("input message ingest failed, id={}", id, e);
+        log.error(
+            "input message processing failed, id={}, dedupeKey={}, sessionId={}, contentType={}, syncTargets={}, finalStatus={}",
+            id, dedupeKey, sessionId, contentType, syncTargets, STATUS_FAILED, e);
         updateStatus(id, STATUS_FAILED);
       }
     });
@@ -534,7 +669,11 @@ public class InputMessageServiceImpl implements InputMessageService {
     try {
       username = resolveUsername(token);
     } catch (Exception e) {
-      log.warn("create input message failed to parse token", e);
+      log.warn("create input message failed to parse token, dedupeKey={}, sessionId={}, contentType={}, syncTargets={}",
+          inputMessageCreateParam == null ? null : inputMessageCreateParam.getDedupeKey(),
+          inputMessageCreateParam == null ? null : inputMessageCreateParam.getSessionId(),
+          inputMessageCreateParam == null ? null : inputMessageCreateParam.getContentType(),
+          inputMessageCreateParam == null ? null : inputMessageCreateParam.getSyncTargets(), e);
       return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
     }
     return createMessageForUsername(inputMessageCreateParam, username);
@@ -546,7 +685,7 @@ public class InputMessageServiceImpl implements InputMessageService {
     try {
       username = resolveUsername(token);
     } catch (Exception e) {
-      log.warn("get input message by dedupe key failed to parse token", e);
+      log.warn("get input message by dedupe key failed to parse token, dedupeKey={}", dedupeKey, e);
       return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
     }
 
@@ -557,20 +696,49 @@ public class InputMessageServiceImpl implements InputMessageService {
 
   @Override
   public JsonResult<?> getMessagesBySessionId(String sessionId, String token) {
+    return getMessagesBySessionId(sessionId, null, null, token);
+  }
+
+  @Override
+  public JsonResult<?> getMessagesBySessionId(String sessionId, Integer page, Integer size, String token) {
     String username;
     try {
       username = resolveUsername(token);
     } catch (Exception e) {
-      log.warn("get input messages by session failed to parse token", e);
+      log.warn("get input messages by session failed to parse token, sessionId={}, page={}, size={}",
+          sessionId, page, size, e);
       return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
     }
 
-    var entities = inputMessageRepository.findAllBySessionIdAndCreatedByOrderByReceivedAtDesc(sessionId,
-        username);
-    if (entities.isEmpty()) {
+    return getMessagesBySessionIdForUsername(sessionId, page, size, username);
+  }
+
+  private JsonResult<?> getMessagesBySessionIdForUsername(String sessionId, Integer page, Integer size,
+      String username) {
+    if (page == null && size == null) {
+      var entities = inputMessageRepository.findAllBySessionIdAndCreatedByOrderByReceivedAtDesc(sessionId,
+          username);
+      if (entities.isEmpty()) {
+        return ResultTool.fail(ResultCode.NO_PERMISSION);
+      }
+      return ResultTool.success(entities.stream().map(this::toResponse)
+          .collect(Collectors.toList()));
+    }
+
+    int requestedPage = page == null ? DEFAULT_SESSION_QUERY_PAGE : page;
+    int requestedSize = size == null ? DEFAULT_SESSION_QUERY_SIZE : size;
+    if (requestedPage < 0 || requestedSize < 1 || requestedSize > MAX_SESSION_QUERY_SIZE) {
+      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
+    }
+
+    Page<InputMessageEntity> entitiesPage = inputMessageRepository.findAllBySessionIdAndCreatedBy(sessionId,
+        username, PageRequest.of(requestedPage, requestedSize, Sort.by(Sort.Direction.DESC, "receivedAt")));
+    if (entitiesPage.isEmpty() && entitiesPage.getTotalElements() == 0) {
       return ResultTool.fail(ResultCode.NO_PERMISSION);
     }
-    return ResultTool.success(entities.stream().map(this::toResponse)
+    log.info("input messages queried by session, sessionId={}, user={}, page={}, size={}, returned={}",
+        sessionId, username, requestedPage, requestedSize, entitiesPage.getNumberOfElements());
+    return ResultTool.success(entitiesPage.getContent().stream().map(this::toResponse)
         .collect(Collectors.toList()));
   }
 
@@ -581,10 +749,48 @@ public class InputMessageServiceImpl implements InputMessageService {
     try {
       username = resolveUsername(token);
     } catch (Exception e) {
-      log.warn("process input message failed to parse token", e);
+      log.warn("process input message failed to parse token, messageId={}", id, e);
       return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
     }
     return processMessageForUsername(id, username);
+  }
+
+  private JsonResult<?> retryMessageForUsername(long id, String username) {
+    var entityOptional = inputMessageRepository.findById(id);
+    if (entityOptional.isEmpty() || !username.equals(entityOptional.get().getCreatedBy())) {
+      return ResultTool.fail(ResultCode.NO_PERMISSION);
+    }
+
+    InputMessageEntity entity = entityOptional.get();
+    if (!STATUS_FAILED.equals(entity.getStatus())) {
+      log.warn(
+          "input message retry rejected, messageId={}, dedupeKey={}, sessionId={}, currentStatus={}, syncStatus={}, requestedBy={}",
+          entity.getId(), entity.getDedupeKey(), entity.getSessionId(), entity.getStatus(),
+          resolveSyncStatus(entity.getSyncTargets(), entity.getSyncStatus()), username);
+      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
+    }
+
+    log.info("input message retry queued, messageId={}, dedupeKey={}, sessionId={}, previousStatus={}, syncStatus={}, user={}",
+        entity.getId(), entity.getDedupeKey(), entity.getSessionId(), entity.getStatus(),
+        resolveSyncStatus(entity.getSyncTargets(), entity.getSyncStatus()), username);
+    JsonResult<?> processResult = processMessageForUsername(id, username);
+    if (!processResult.getSuccess()) {
+      return processResult;
+    }
+    return ResultTool.success(toResponse(entity));
+  }
+
+  @Override
+  @Transactional(rollbackFor = Exception.class)
+  public JsonResult<?> retryMessage(long id, String token) {
+    String username;
+    try {
+      username = resolveUsername(token);
+    } catch (Exception e) {
+      log.warn("retry input message failed to parse token, messageId={}", id, e);
+      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
+    }
+    return retryMessageForUsername(id, username);
   }
 
   @Override

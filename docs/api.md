@@ -1737,8 +1737,9 @@ Content-Type: application/json
 **说明:**
 
 - `contentType` 当前常见值为 `text`、`url`、`image`、`voice`
+- `attachments` 最多允许 10 个元素；附件 URL 必须是有效的 `http/https` 地址，`contentType` 需符合 MIME type 语法，`size` 若提供则必须在 `0` 到 `52428800` 字节之间
 - `syncTargets` 为逗号分隔字符串，当前建议使用 `feishu`
-- `github` 目标值已被模型接受，但当前不会执行实际同步
+- `syncTargets` 当前仅支持 `feishu`，传入 `github` 会被接口校验直接拒绝
 
 **响应示例:**
 ```json
@@ -1818,6 +1819,28 @@ Authorization: Bearer {token}
 4. 自动补充 `category` 与 `tags`
 5. 若 `syncTargets` 包含 `feishu`，则继续执行飞书同步
 6. 最终消息状态进入 `ingested` 或 `failed`
+
+### 重试失败的输入消息
+
+```
+POST /input/messages/{id}/retry
+```
+
+**请求头:**
+```
+Authorization: Bearer {token}
+```
+
+**用途:**
+
+- 仅用于 `status=failed` 的输入消息
+- 仅消息所有者可以调用
+- 会将失败消息重新排队进入处理链路
+
+**说明:**
+
+- 若消息只是 `syncStatus=failed` 但 `status=ingested`，不要使用该接口，以免重复入库
+- 当前不会对 `status=processing` 的消息执行强制重试，避免重复写入知识库或重复外部同步
 
 ### 语义召回输入消息
 

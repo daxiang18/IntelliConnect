@@ -201,17 +201,17 @@ curl -v https://your-domain.com/api/v2/wechat/callback
 - URL 抓取失败时，系统会优先保留原始链接内容，必要时会附加 `## 原始链接消息` 作为兜底信息
 - 如需验证整条链路，优先使用 `bash ./scripts/smoke-input-flow.sh`
 
-#### 问题: syncStatus 一直是 pending
-**症状**: 消息已进入 `ingested`，但 `syncStatus` 没有变成 `synced`。
+#### 问题: 创建消息时提示 syncTargets 参数无效
+**症状**: 调用 `/api/v2/input/messages` 时返回 `PARAM_NOT_VALID`，且请求中包含了 `github` 或其他未支持目标。
 
 **排查步骤**:
-1. 检查 `syncTargets` 是否只配置了 `github`
-2. 若需要飞书同步，确认 `syncTargets` 包含 `feishu`
-3. 通过 `/api/v2/input/messages/by-dedupe` 查看最新返回值
+1. 检查 `syncTargets` 是否包含 `github`
+2. 确认当前只传入 `feishu`
+3. 若不需要外部同步，直接不传 `syncTargets`
 
 **说明**:
-- 当前仅实现 `feishu` 的实际同步
-- `github` 目标值暂时只用于预留，不会触发同步动作，因此聚合同步状态可能保持 `pending`
+- 当前新请求仅支持 `feishu`
+- 传入 `github` 或其他未支持值时，接口会在创建阶段直接拒绝
 
 #### 问题: 飞书同步失败
 **症状**: `status=ingested`，但 `syncStatus=failed`，或者 `externalReferencesJson` 中出现错误信息。
@@ -222,6 +222,19 @@ curl -v https://your-domain.com/api/v2/wechat/callback
 3. 检查 `FEISHU_SYNC_MODE` 为 `doc` 还是 `wiki`
 4. 若使用 `wiki` 模式，确认 `FEISHU_WIKI_SPACE_ID` 和 `FEISHU_WIKI_PARENT_NODE_TOKEN` 已配置
 5. 检查 `FEISHU_WEB_BASE_URL` 是否正确，避免回写的文档链接不可用
+
+#### 问题: 输入消息处理失败后如何恢复
+**症状**: `status=failed`，消息没有进入知识库，后续召回或长期记忆都无法命中该条记录。
+
+**排查步骤**:
+1. 先查看后端日志中该 `messageId` 的失败栈
+2. 修复根因，例如 Chroma 连通性、URL 抓取异常、认证或配置问题
+3. 重新调用 `POST /api/v2/input/messages/{id}/retry`
+
+**说明**:
+- 重试接口仅接受 `status=failed`
+- 若当前是 `status=ingested` 且 `syncStatus=failed`，说明知识库写入已经成功，不要使用重试接口重复 ingest
+- 若消息长时间停留在 `processing`，当前版本不会自动清理或强制重试，因为模型中没有单独的处理开始时间字段，需先人工确认是否真的卡住
 
 #### 问题: 输入闭环或测试启动时报 JsonParseException，提示遇到字符 `<`
 **症状**: 日志中出现 `Unexpected character ('<' ...)`，通常发生在知识库/向量库初始化或写入阶段。

@@ -165,7 +165,7 @@ IntelliConnect 平台使用 MySQL 作为主要的关系型数据库，存储用�
 
 **补充说明:**
 
-- `sync_targets` 可接受 `feishu`、`github` 两类值，但当前仅实现 `feishu` 的实际同步。
+- `sync_targets` 当前仅支持 `feishu`；传入未支持的目标值会被请求校验拒绝。
 - 自动分类 `category` 与标签 `tags` 不落 MySQL 字段，而是作为向量库元数据写入召回结果中。
 - `url` 类型在写入向量库前会优先抓取网页正文；若抓取失败，会保留原始链接摘要作为兜底内容。
 

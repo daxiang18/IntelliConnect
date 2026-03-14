@@ -21,13 +21,15 @@ package top.rslly.iot.param.request;
 
 import lombok.Data;
 
-import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.util.List;
 
 @Data
 public class InputMessageCreateParam {
+  public static final int MAX_ATTACHMENTS = 10;
+
   @NotBlank(message = "sourceType 不能为空")
   @Size(min = 1, max = 64, message = "sourceType 长度必须在 1 到 64 之间")
   private String sourceType;
@@ -53,8 +55,8 @@ public class InputMessageCreateParam {
   @Size(max = 10000, message = "normalizedContent 长度不能超过 10000")
   private String normalizedContent;
 
-  @Valid
-  private List<InputAttachmentParam> attachments;
+  @Size(max = MAX_ATTACHMENTS, message = "attachments 最多允许 10 个附件")
+  private List<@NotNull(message = "attachment 不能为空") @jakarta.validation.Valid InputAttachmentParam> attachments;
 
   @NotBlank(message = "dedupeKey 不能为空")
   @Size(min = 1, max = 255, message = "dedupeKey 长度必须在 1 到 255 之间")

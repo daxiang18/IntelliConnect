@@ -18,7 +18,7 @@
 3. `syncTargets` 中包含 `feishu`
 4. 后端已正确配置 `FEISHU_*` 环境变量
 
-> `syncTargets` 中虽然允许出现 `github`，但当前代码并不会执行 GitHub 同步；生产使用建议只填写 `feishu`。
+> 当前请求只接受 `feishu` 作为同步目标；若传入 `github`，接口会直接返回参数校验失败。
 
 ## 配置项
 

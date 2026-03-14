@@ -22,6 +22,8 @@ package top.rslly.iot.services.feishu;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
+import lombok.extern.slf4j.Slf4j;
+import okhttp3.Call;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -37,22 +39,32 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+@Slf4j
 @Component
 public class HttpFeishuOpenApiClient implements FeishuOpenApiClient {
   private static final MediaType JSON_MEDIA_TYPE = MediaType.get("application/json; charset=utf-8");
   private static final int MAX_BLOCK_TEXT_LENGTH = 1000;
   private static final int MAX_BLOCK_BATCH_SIZE = 20;
+  private static final int MAX_RETRY_ATTEMPTS = 3;
+  private static final long INITIAL_RETRY_DELAY_MILLIS = 200L;
+  private static final long MAX_RETRY_DELAY_MILLIS = 1_000L;
 
   private final FeishuProperty feishuProperty;
-  private final OkHttpClient okHttpClient;
+  private final Call.Factory callFactory;
+  private final RetrySleeper retrySleeper;
 
   public HttpFeishuOpenApiClient(FeishuProperty feishuProperty) {
-    this.feishuProperty = feishuProperty;
-    this.okHttpClient = new OkHttpClient.Builder()
+    this(feishuProperty, new OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
-        .build();
+        .build(), Thread::sleep);
+  }
+
+  HttpFeishuOpenApiClient(FeishuProperty feishuProperty, Call.Factory callFactory, RetrySleeper retrySleeper) {
+    this.feishuProperty = feishuProperty;
+    this.callFactory = callFactory;
+    this.retrySleeper = retrySleeper;
   }
 
   @Override
@@ -158,28 +170,45 @@ public class HttpFeishuOpenApiClient implements FeishuOpenApiClient {
     if (tenantAccessToken != null && !tenantAccessToken.isBlank()) {
       requestBuilder.header("Authorization", "Bearer " + tenantAccessToken);
     }
+    Request request = requestBuilder.build();
 
-    try (Response response = okHttpClient.newCall(requestBuilder.build()).execute()) {
-      String body = response.body() == null ? "" : response.body().string();
-      if (!response.isSuccessful()) {
-        throw new IllegalStateException(
-            "Feishu " + action + " failed with httpStatus=" + response.code() + ", body=" + abbreviate(body));
+    long retryDelayMillis = INITIAL_RETRY_DELAY_MILLIS;
+    for (int attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
+      try (Response response = callFactory.newCall(request).execute()) {
+        String body = response.body() == null ? "" : response.body().string();
+        if (!response.isSuccessful()) {
+          if (shouldRetry(response.code()) && attempt < MAX_RETRY_ATTEMPTS) {
+            log.warn("Transient Feishu {} failure on attempt {}/{}, httpStatus={}, retrying in {}ms", action,
+                attempt, MAX_RETRY_ATTEMPTS, response.code(), retryDelayMillis);
+            retryDelayMillis = sleepBeforeRetry(action, retryDelayMillis);
+            continue;
+          }
+          throw new IllegalStateException(
+              "Feishu " + action + " failed with httpStatus=" + response.code() + ", body=" + abbreviate(body));
+        }
+        JSONObject jsonObject = JSON.parseObject(body);
+        if (jsonObject == null) {
+          throw new IllegalStateException("Feishu " + action + " returned empty body");
+        }
+        Integer code = jsonObject.getInteger("code");
+        if (code != null && code != 0) {
+          String message = firstNonBlank(jsonObject.getString("msg"), jsonObject.getString("message"));
+          throw new IllegalStateException(
+              "Feishu " + action + " failed with code=" + code + ", msg=" + abbreviate(message));
+        }
+        JSONObject data = jsonObject.getJSONObject("data");
+        return data == null ? new JSONObject() : data;
+      } catch (IOException ex) {
+        if (attempt >= MAX_RETRY_ATTEMPTS) {
+          throw new IllegalStateException("Feishu " + action + " request failed", ex);
+        }
+        log.warn("Transient Feishu {} request failure on attempt {}/{}, retrying in {}ms, cause={}, message={}",
+            action, attempt, MAX_RETRY_ATTEMPTS, retryDelayMillis, ex.getClass().getSimpleName(),
+            abbreviate(ex.getMessage()));
+        retryDelayMillis = sleepBeforeRetry(action, retryDelayMillis);
       }
-      JSONObject jsonObject = JSON.parseObject(body);
-      if (jsonObject == null) {
-        throw new IllegalStateException("Feishu " + action + " returned empty body");
-      }
-      Integer code = jsonObject.getInteger("code");
-      if (code != null && code != 0) {
-        String message = firstNonBlank(jsonObject.getString("msg"), jsonObject.getString("message"));
-        throw new IllegalStateException(
-            "Feishu " + action + " failed with code=" + code + ", msg=" + abbreviate(message));
-      }
-      JSONObject data = jsonObject.getJSONObject("data");
-      return data == null ? new JSONObject() : data;
-    } catch (IOException ex) {
-      throw new IllegalStateException("Feishu " + action + " request failed", ex);
     }
+    throw new IllegalStateException("Feishu " + action + " request failed");
   }
 
   private String buildApiUrl(String path) {
@@ -240,6 +269,20 @@ public class HttpFeishuOpenApiClient implements FeishuOpenApiClient {
     return content.substring(0, 297) + "...";
   }
 
+  private boolean shouldRetry(int httpStatus) {
+    return httpStatus == 429 || (httpStatus >= 500 && httpStatus < 600);
+  }
+
+  private long sleepBeforeRetry(String action, long delayMillis) {
+    try {
+      retrySleeper.sleep(delayMillis);
+      return Math.min(delayMillis * 2L, MAX_RETRY_DELAY_MILLIS);
+    } catch (InterruptedException ex) {
+      Thread.currentThread().interrupt();
+      throw new IllegalStateException("Feishu " + action + " retry interrupted", ex);
+    }
+  }
+
   private String firstNonBlank(String... values) {
     if (values == null) {
       return null;
@@ -250,5 +293,10 @@ public class HttpFeishuOpenApiClient implements FeishuOpenApiClient {
       }
     }
     return null;
+  }
+
+  @FunctionalInterface
+  interface RetrySleeper {
+    void sleep(long delayMillis) throws InterruptedException;
   }
 }

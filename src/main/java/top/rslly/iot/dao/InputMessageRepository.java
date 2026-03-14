@@ -19,6 +19,8 @@
  */
 package top.rslly.iot.dao;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import top.rslly.iot.models.InputMessageEntity;
 
@@ -34,4 +36,6 @@ public interface InputMessageRepository extends JpaRepository<InputMessageEntity
 
   List<InputMessageEntity> findAllBySessionIdAndCreatedByOrderByReceivedAtDesc(String sessionId,
       String createdBy);
+
+  Page<InputMessageEntity> findAllBySessionIdAndCreatedBy(String sessionId, String createdBy, Pageable pageable);
 }

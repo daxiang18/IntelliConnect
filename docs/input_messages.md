@@ -82,7 +82,42 @@
 | `synced` | 所有已实现的同步目标已成功完成 |
 | `failed` | 存在同步失败 |
 
-> 注意：当前仅实现 `feishu` 的实际同步。`github` 目标值已被识别，但不会执行同步动作，因此在只配置 `github` 时，消息本身可进入 `ingested`，而 `syncStatus` 可能保持 `pending`。
+> 注意：当前仅支持 `feishu` 作为可请求的同步目标。若请求中传入 `github`，接口会直接拒绝该消息创建。
+
+## 输入校验补充
+
+- 服务端会在控制器和服务层同时校验输入消息创建请求，避免直接调用服务时绕过基础参数校验。
+- `attachments` 最多允许 10 个元素；列表中不允许出现 `null`。
+- 附件 `url` 必须是可解析的 `http/https` 地址；例如 `ftp://...`、缺少主机名的 URL 会被拒绝。
+- 附件 `contentType` 必须符合 `type/subtype` 形式，例如 `image/jpeg`、`audio/amr`。
+- 附件 `size` 为可选元数据；若提供则必须为非负数且不超过 `52428800` 字节（50 MiB）。
+
+## 失败恢复与手动重试
+
+### 何时使用 `/api/v2/input/messages/{id}/retry`
+
+当消息满足以下条件时，可以手动触发重试：
+
+- `status=failed`
+- 当前调用人就是该消息的 `createdBy`
+- 已修复导致失败的外部条件（例如向量库、网页抓取或鉴权配置）
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer {token}" \
+  http://localhost:8080/api/v2/input/messages/1001/retry
+```
+
+重试成功后，消息会重新进入 `processing`，随后再次尝试写入知识库并执行后续链路；若执行成功，最终状态会回到 `ingested`。
+
+### 哪些情况不要用重试接口
+
+| 场景 | 当前状态 | 说明 |
+|------|----------|------|
+| 仅飞书同步失败 | `status=ingested` 且 `syncStatus=failed` | 说明知识库入库已经完成，不应直接用重试接口重复 ingest |
+| 正在处理中但怀疑卡住 | `status=processing` | 当前模型没有单独的 `processingStartedAt` 字段，系统不会强制重试该状态，避免重复入库或重复外部同步 |
+
+若消息长时间停留在 `processing`，建议先查看后端日志，确认失败原因或线程执行情况，再决定是否由运维手动干预该记录状态。
 
 ## 自动分类与标签
 
@@ -156,6 +191,14 @@ curl -H "Authorization: Bearer {token}" \
   "memoryKey": "input:wechat:gh_xxx:user-open-id",
   "description": "从输入消息中提取的长期记忆"
 }
+```
+
+### 6. 手动重试失败消息
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer {token}" \
+  http://localhost:8080/api/v2/input/messages/1001/retry
 ```
 
 ## Smoke 验证

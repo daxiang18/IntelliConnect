@@ -19,6 +19,7 @@
  */
 package top.rslly.iot.services;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import top.rslly.iot.models.InputMessageEntity;
 import top.rslly.iot.services.feishu.FeishuOpenApiClient;
@@ -30,6 +31,7 @@ import java.util.Locale;
 import java.util.Map;
 
 @Service
+@Slf4j
 public class FeishuSyncService {
   private static final String MODE_DOC = "doc";
   private static final String MODE_WIKI = "wiki";
@@ -52,6 +54,8 @@ public class FeishuSyncService {
 
     String mode = normalizeMode();
     String title = buildTitle(entity, resolvedContent);
+    log.info("starting Feishu sync, messageId={}, dedupeKey={}, sessionId={}, mode={}, title={}", entity.getId(),
+        entity.getDedupeKey(), entity.getSessionId(), mode, title);
     String tenantAccessToken =
         feishuOpenApiClient.getTenantAccessToken(feishuProperty.getAppId(), feishuProperty.getAppSecret());
     FeishuOpenApiClient.FeishuDocument document =
@@ -83,6 +87,8 @@ public class FeishuSyncService {
       }
     }
 
+    log.info("Feishu sync completed, messageId={}, dedupeKey={}, sessionId={}, mode={}, documentId={}",
+        entity.getId(), entity.getDedupeKey(), entity.getSessionId(), mode, document.documentId());
     return new FeishuSyncResult(syncedAt, reference);
   }
 

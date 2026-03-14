@@ -67,8 +67,10 @@ public class InputController {
   @Operation(summary = "按会话查询标准化输入消息", description = "用于最小闭环验证同一会话消息列表")
   @RequestMapping(value = "/messages/by-session", method = RequestMethod.GET)
   public JsonResult<?> getMessagesBySessionId(@RequestParam("sessionId") String sessionId,
+      @RequestParam(value = "page", required = false) Integer page,
+      @RequestParam(value = "size", required = false) Integer size,
       @RequestHeader("Authorization") String header) {
-    return inputMessageService.getMessagesBySessionId(sessionId, header);
+    return inputMessageService.getMessagesBySessionId(sessionId, page, size, header);
   }
 
   @Operation(summary = "触发标准化输入消息处理", description = "异步将输入消息写入知识向量库并更新处理状态")
@@ -76,6 +78,13 @@ public class InputController {
   public JsonResult<?> processMessage(@PathVariable("id") @Min(1) long id,
       @RequestHeader("Authorization") String header) {
     return inputMessageService.processMessage(id, header);
+  }
+
+  @Operation(summary = "重试失败的输入消息", description = "仅允许消息所有者对 status=failed 的消息重新排队处理")
+  @RequestMapping(value = "/messages/{id}/retry", method = RequestMethod.POST)
+  public JsonResult<?> retryMessage(@PathVariable("id") @Min(1) long id,
+      @RequestHeader("Authorization") String header) {
+    return inputMessageService.retryMessage(id, header);
   }
 
   @Operation(summary = "召回已处理的输入消息", description = "按当前认证用户及可选会话范围对已入向量库的消息做语义检索")

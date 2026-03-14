@@ -1,0 +1,14 @@
+# Profile: chroma-validation
+#
+# Activates a real Chroma embedding store for integration / staging validation.
+# All values are opt-in via environment variables; nothing here changes the
+# default developer or test profiles.
+#
+# Enable this profile with:
+#   -Dspring.profiles.active=chroma-validation
+# or by setting SPRING_PROFILES_ACTIVE=chroma-validation in the environment.
+
+rag:
+  # Explicitly disable the in-memory fallback so the real Chroma store is used.
+  knowledge_chat_embeddingStore_in_memory: false
+  knowledge_chat_embeddingStore_url: ${CHROMA_VALIDATION_URL:http://127.0.0.1:18000}

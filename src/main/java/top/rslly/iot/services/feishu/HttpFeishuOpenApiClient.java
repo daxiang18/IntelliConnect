@@ -29,6 +29,7 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import top.rslly.iot.utility.properties.FeishuProperty;
@@ -55,6 +56,14 @@ public class HttpFeishuOpenApiClient implements FeishuOpenApiClient {
   private final Call.Factory callFactory;
   private final RetrySleeper retrySleeper;
 
+  // Required by Spring for conditional bean creation
+  HttpFeishuOpenApiClient() {
+    this.feishuProperty = null;
+    this.callFactory = null;
+    this.retrySleeper = null;
+  }
+
+  @Autowired
   public HttpFeishuOpenApiClient(FeishuProperty feishuProperty) {
     this(feishuProperty, new OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
@@ -74,14 +83,32 @@ public class HttpFeishuOpenApiClient implements FeishuOpenApiClient {
     JSONObject payload = new JSONObject();
     payload.put("app_id", appId);
     payload.put("app_secret", appSecret);
-    JSONObject data =
-        postForData("auth/v3/tenant_access_token/internal", null, payload, "get tenant access token");
-    String tenantAccessToken =
-        firstNonBlank(data.getString("tenant_access_token"), data.getString("tenantAccessToken"));
-    if (tenantAccessToken == null || tenantAccessToken.isBlank()) {
-      throw new IllegalStateException("Feishu tenant access token missing in response");
+
+    // Token API returns data directly in the response body, not wrapped in "data" field
+    Request.Builder requestBuilder = new Request.Builder()
+        .url(buildApiUrl("auth/v3/tenant_access_token/internal"))
+        .post(RequestBody.create(JSON.toJSONString(payload), JSON_MEDIA_TYPE));
+    Request request = requestBuilder.build();
+
+    try (Response response = callFactory.newCall(request).execute()) {
+      String body = response.body() == null ? "" : response.body().string();
+      JSONObject jsonObject = JSON.parseObject(body);
+
+      Integer code = jsonObject.getInteger("code");
+      if (code == null || code != 0) {
+        String message = jsonObject.getString("msg");
+        throw new IllegalStateException("Feishu get tenant access token failed with code=" + code + ", msg=" + message);
+      }
+
+      // Token is in the top-level response, not in "data" field
+      String tenantAccessToken = jsonObject.getString("tenant_access_token");
+      if (tenantAccessToken == null || tenantAccessToken.isBlank()) {
+        throw new IllegalStateException("Feishu tenant access token missing in response");
+      }
+      return tenantAccessToken;
+    } catch (IOException ex) {
+      throw new IllegalStateException("Feishu get tenant access token request failed", ex);
     }
-    return tenantAccessToken;
   }
 
   @Override
@@ -135,8 +162,10 @@ public class HttpFeishuOpenApiClient implements FeishuOpenApiClient {
 
       JSONObject payload = new JSONObject();
       payload.put("children", children);
+      payload.put("document_revision_id", -1);
+      // Use blocks/root/children to append to document root
       postForData(String.format(Locale.ROOT,
-          "docx/v1/documents/%s/blocks/%s/children?document_revision_id=-1", documentId, documentId),
+          "docx/v1/documents/%s/blocks/root/children", documentId),
           tenantAccessToken, payload, "append document content");
     }
   }

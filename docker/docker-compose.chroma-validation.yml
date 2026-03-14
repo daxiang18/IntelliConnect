@@ -1,0 +1,27 @@
+# Minimal single-service compose file for the Chroma validation lane.
+# Start it before running ChromaEmbeddingStoreIT or the chroma-validation
+# Spring profile:
+#
+#   docker compose -f docker/docker-compose.chroma-validation.yml up -d
+#   CHROMA_VALIDATION_ENABLED=true \
+#     CHROMA_VALIDATION_URL=http://127.0.0.1:18000 \
+#     ./mvnw -q -Dtest=ChromaEmbeddingStoreIT test
+#
+# Stop and clean up:
+#   docker compose -f docker/docker-compose.chroma-validation.yml down -v
+
+services:
+  chromadb-validation:
+    image: ${CHROMA_VALIDATION_IMAGE:-chromadb/chroma:0.4.24}
+    container_name: IntelliConnect-chroma-validation
+    ports:
+      - "${CHROMA_VALIDATION_PORT:-18000}:8000"
+    volumes:
+      - "chromadb-validation-volume:/chroma/chroma"
+    environment:
+      - TZ=Asia/Shanghai
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/chroma/chroma
+
+volumes:
+  chromadb-validation-volume:

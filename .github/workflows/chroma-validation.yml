@@ -1,0 +1,56 @@
+name: Chroma Validation
+
+# Opt-in lane: runs only on manual trigger or when the caller workflow
+# dispatches it explicitly.  The default `check` workflow is NOT affected.
+on:
+  workflow_dispatch:
+    inputs:
+      chroma_url:
+        description: "Chroma base URL (leave blank to use the Compose service)"
+        required: false
+        default: "http://127.0.0.1:18000"
+  workflow_call:
+    inputs:
+      chroma_url:
+        description: "Chroma base URL"
+        required: false
+        type: string
+        default: "http://127.0.0.1:18000"
+
+jobs:
+  chroma-validation:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v3
+        with:
+          java-version: "21"
+          distribution: temurin
+          architecture: x64
+
+      - name: Start Chroma via Docker Compose
+        run: |
+          docker compose \
+            -f docker/docker-compose.chroma-validation.yml \
+            up -d --wait || true
+          # Give Chroma a moment to become ready
+          sleep 5
+
+      - name: Run Chroma integration tests
+        env:
+          CHROMA_VALIDATION_ENABLED: "true"
+          CHROMA_VALIDATION_URL: ${{ inputs.chroma_url || 'http://127.0.0.1:18000' }}
+        run: |
+          bash ./mvnw -q \
+            -Dtest=ChromaEmbeddingStoreIT \
+            test
+
+      - name: Stop Chroma
+        if: always()
+        run: |
+          docker compose \
+            -f docker/docker-compose.chroma-validation.yml \
+            down -v

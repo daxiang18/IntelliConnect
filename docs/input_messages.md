@@ -19,7 +19,7 @@
 | `text` | 文本消息 | 直接使用正文进行处理 |
 | `url` | 网页链接 | 处理阶段会抓取网页正文并生成结构化摘要 |
 | `image` | 图片消息 | 处理阶段会尝试调用视觉模型提取图片中的文字和关键场景描述，并保留原始图片链接 |
-| `voice` | 语音消息 | 依赖上游转写文本进入知识库，附件中保留原始音频链接 |
+| `voice` | 语音消息 | 处理阶段若缺少上游转写文本，会在流水线内调用 ASR 服务进行兜底转写；附件中保留原始音频链接 |
 
 ## 整体处理流程
 
@@ -28,10 +28,11 @@
 3. 调用 `/api/v2/input/messages/{id}/process` 触发异步处理
 4. 若 `contentType=url`，系统先抓取网页并更新 `normalizedContent`
 5. 若 `contentType=image`，系统会尝试补充视觉摘要并更新 `normalizedContent`
-6. 处理后的内容写入知识向量库
-7. 系统自动补充 `category` 与 `tags`
-8. 若 `syncTargets` 包含 `feishu`，则继续执行飞书同步
-9. 可通过去重键查询状态、进行语义召回，或提升为长期记忆
+6. 若 `contentType=voice` 且 `normalizedContent` 与 `rawContent` 相同（即缺少上游转写），系统会调用 ASR 服务进行流水线内转写并更新 `normalizedContent`
+7. 处理后的内容写入知识向量库
+8. 系统自动补充 `category` 与 `tags`
+9. 若 `syncTargets` 包含 `feishu`，则继续执行飞书同步
+10. 可通过去重键查询状态、进行语义召回，或提升为长期记忆
 
 ## 核心字段
 
@@ -59,6 +60,7 @@
 | `status` | 消息处理状态 |
 | `processingStartedAt` | 当前处理批次开始时间；仅 `status=processing` 时非空，历史遗留记录会回退使用 `receivedAt` 做诊断 |
 | `processingDurationMs` | 当前处理批次已持续时间（毫秒）；仅 `status=processing` 时返回 |
+| `processingAttemptCount` | 累计处理尝试次数；每次进入 `processing` 状态时自增，不随状态清除而重置 |
 | `syncStatus` | 外部同步聚合状态 |
 | `syncedAt` | 最近一次成功同步时间 |
 | `externalReferencesJson` | 外部系统引用信息或失败原因 |
@@ -118,15 +120,13 @@ curl -X POST \
 | 场景 | 当前状态 | 说明 |
 |------|----------|------|
 | 仅飞书同步失败 | `status=ingested` 且 `syncStatus=failed` | 说明知识库入库已经完成，不应直接用重试接口重复 ingest |
-| 正在处理中但怀疑卡住 | `status=processing` | 当前版本提供诊断接口暴露 `processingStartedAt`，但仍不会自动或强制重试该状态，避免重复入库或重复外部同步 |
+| 正在处理中但怀疑卡住 | `status=processing` | 先用诊断接口确认 `processingStartedAt` 与 `processingAttemptCount`；当前版本仅提供诊断与过期尝试防护，不提供公开的强制重置接口 |
 
-若消息长时间停留在 `processing`，建议先查看后端日志，确认失败原因或线程执行情况，再决定是否由运维手动干预该记录状态。
+若消息长时间停留在 `processing`，建议先查看后端日志，结合 `processingStartedAt`、`processingAttemptCount` 和后端线程执行情况判断是否需要运维介入。当前版本仍不会对外开放强制重置或自动重排队，避免重复 ingest 或重复外部同步。
 
 ## 卡住中的消息诊断
 
 ### 查询疑似卡住的 `processing` 消息
-
-新增接口：
 
 ```bash
 curl -H "Authorization: Bearer {token}" \
@@ -141,11 +141,19 @@ curl -H "Authorization: Bearer {token}" \
 
 返回结果只包含当前调用者名下、仍处于 `status=processing` 且处理起点早于阈值的消息。历史遗留记录若还没有 `processingStartedAt`，系统会回退使用 `receivedAt`。
 
-### 为什么只做诊断，不做自动恢复
+### 安全模型：处理尝试令牌（Attempt Token）
 
-- 当前异步处理链路没有任务取消或处理租约（lease）机制
-- 若对疑似卡住消息自动改状态或自动重排队，原任务稍后仍可能完成，带来重复 ingest 或重复外部同步风险
-- 因此本次改动只增加显式可见性：让操作人员先定位和确认，再决定是否进行人工恢复
+每次消息进入 `processing` 状态时，系统会：
+
+1. 生成一个新的 UUID 存储在 `processing_attempt_token` 字段
+2. 将 `processing_attempt_count` 自增 1
+
+异步任务在完成时（无论成功或失败）先用 `findById` 重新加载消息，核对当前存储的令牌与任务启动时捕获的令牌是否一致：
+
+- **一致**：正常写入最终状态（`ingested` 或 `failed`）
+- **不一致**：认为自身是过期任务，跳过写入，仅记录 warn 日志
+
+这确保了当运维人工调整记录状态，或后续批次重新启动处理时，旧任务不会再把最终状态覆盖回去。但这套保护目前只覆盖“最终状态写回”，并不等价于任务取消，因此对外 API 仍保持“仅诊断，不强制重置”的策略。
 
 ## 自动分类与标签
 
@@ -155,7 +163,7 @@ curl -H "Authorization: Bearer {token}" \
 
 - `image`：微信图片桥接现在会像文本/链接一样自动进入处理流程；若视觉模型可用，`normalizedContent` 会补充图片中的可见文字、主体对象和关键场景描述，并继续保留原始图片链接。
 - 若图片视觉提取失败，系统会回退到原有的 `normalizedContent`（通常是图片 URL），不会改变现有重试语义。
-- `voice`：当前仍以微信侧车提供的 `transcribedText` 作为可搜索正文，原始音频链接保存在附件中，后续可在此基础上继续增强。
+- `voice`：若上游（如微信侧车）已提供 `transcribedText`，直接作为可搜索正文；若 `normalizedContent` 与 `rawContent` 相同（无上游转写），处理阶段会自动调用配置的 ASR 服务（由 `ai.asr.provider` 控制，默认 `funasr`）进行流水线内转写；原始音频链接始终保存在附件中。若 ASR 也失败（返回空），则回退到音频 URL 进行入库，不影响其他处理语义。
 
 常见分类包括：
 

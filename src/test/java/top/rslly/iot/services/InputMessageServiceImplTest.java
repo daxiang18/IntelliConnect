@@ -35,6 +35,8 @@ import top.rslly.iot.param.response.InputMessageResponse;
 import top.rslly.iot.services.agent.AiService;
 import top.rslly.iot.services.agent.AgentLongMemoryServiceImpl;
 import top.rslly.iot.utility.JwtTokenUtil;
+import top.rslly.iot.utility.ai.voice.ASR.AsrService;
+import top.rslly.iot.utility.ai.voice.ASR.AsrServiceFactory;
 import top.rslly.iot.utility.input.InputContentAutoTagger;
 import top.rslly.iot.utility.input.UrlContentNormalizer;
 import top.rslly.iot.utility.result.JsonResult;
@@ -47,7 +49,9 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -72,6 +76,8 @@ class InputMessageServiceImplTest {
   private UrlContentNormalizer urlContentNormalizer;
   @Mock
   private FeishuSyncService feishuSyncService;
+  @Mock
+  private AsrServiceFactory asrServiceFactory;
   @InjectMocks
   private InputMessageServiceImpl inputMessageService;
 
@@ -1065,6 +1071,186 @@ class InputMessageServiceImplTest {
         org.mockito.ArgumentMatchers.eq("processing"),
         org.mockito.ArgumentMatchers.anyLong(),
         any(Pageable.class));
+  }
+
+  @Test
+  void processVoiceMessageWithoutTranscriptShouldCallAsrAndIngest() {
+    InputMessageEntity entity = new InputMessageEntity();
+    entity.setId(30L);
+    entity.setCreatedBy("smoke-user");
+    entity.setSessionId("session-voice-asr");
+    entity.setDedupeKey("dedupe-voice-asr");
+    entity.setContentType("voice");
+    entity.setRawContent("https://example.com/audio.amr");
+    entity.setNormalizedContent("https://example.com/audio.amr");
+    entity.setStatus("received");
+
+    AsrService mockAsrService = mock(AsrService.class);
+    when(asrServiceFactory.getService()).thenReturn(mockAsrService);
+    when(mockAsrService.getText("https://example.com/audio.amr")).thenReturn("今天天气很好");
+    when(inputMessageRepository.findById(30L)).thenReturn(Optional.of(entity));
+    when(inputMessageRepository.save(any(InputMessageEntity.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+    when(embeddingModel.embed(any(TextSegment.class)))
+        .thenReturn(Response.from(Embedding.from(new float[] {0.1f, 0.2f})));
+    doAnswer(invocation -> {
+      Runnable runnable = invocation.getArgument(0);
+      runnable.run();
+      return null;
+    }).when(taskExecutor).execute(any(Runnable.class));
+
+    JsonResult<?> result = inputMessageService.processMessage(30L, token);
+
+    Assertions.assertTrue(result.getSuccess());
+    Assertions.assertEquals("ingested", entity.getStatus());
+    Assertions.assertEquals("今天天气很好", entity.getNormalizedContent());
+    verify(mockAsrService).getText("https://example.com/audio.amr");
+    ArgumentCaptor<TextSegment> segmentCaptor = ArgumentCaptor.forClass(TextSegment.class);
+    verify(knowledgeChatEmbeddingStore).add(any(Embedding.class), segmentCaptor.capture());
+    Assertions.assertEquals("今天天气很好", segmentCaptor.getValue().text());
+    Assertions.assertEquals("voice", segmentCaptor.getValue().metadata().getString("contentType"));
+  }
+
+  @Test
+  void processVoiceMessageWithExistingTranscriptShouldSkipAsr() {
+    InputMessageEntity entity = new InputMessageEntity();
+    entity.setId(31L);
+    entity.setCreatedBy("smoke-user");
+    entity.setSessionId("session-voice-skip");
+    entity.setDedupeKey("dedupe-voice-skip");
+    entity.setContentType("voice");
+    entity.setRawContent("https://example.com/audio2.amr");
+    entity.setNormalizedContent("帮我打开空调");
+    entity.setStatus("received");
+
+    when(inputMessageRepository.findById(31L)).thenReturn(Optional.of(entity));
+    when(inputMessageRepository.save(any(InputMessageEntity.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+    when(embeddingModel.embed(any(TextSegment.class)))
+        .thenReturn(Response.from(Embedding.from(new float[] {0.1f, 0.2f})));
+    doAnswer(invocation -> {
+      Runnable runnable = invocation.getArgument(0);
+      runnable.run();
+      return null;
+    }).when(taskExecutor).execute(any(Runnable.class));
+
+    JsonResult<?> result = inputMessageService.processMessage(31L, token);
+
+    Assertions.assertTrue(result.getSuccess());
+    Assertions.assertEquals("ingested", entity.getStatus());
+    Assertions.assertEquals("帮我打开空调", entity.getNormalizedContent());
+    verify(asrServiceFactory, never()).getService();
+    ArgumentCaptor<TextSegment> segmentCaptor = ArgumentCaptor.forClass(TextSegment.class);
+    verify(knowledgeChatEmbeddingStore).add(any(Embedding.class), segmentCaptor.capture());
+    Assertions.assertEquals("帮我打开空调", segmentCaptor.getValue().text());
+  }
+
+  @Test
+  void processVoiceMessageWithAsrFailureShouldFallBackToAudioUrl() {
+    InputMessageEntity entity = new InputMessageEntity();
+    entity.setId(32L);
+    entity.setCreatedBy("smoke-user");
+    entity.setSessionId("session-voice-fail");
+    entity.setDedupeKey("dedupe-voice-fail");
+    entity.setContentType("voice");
+    entity.setRawContent("https://example.com/audio3.amr");
+    entity.setNormalizedContent("https://example.com/audio3.amr");
+    entity.setStatus("received");
+
+    AsrService mockAsrService = mock(AsrService.class);
+    when(asrServiceFactory.getService()).thenReturn(mockAsrService);
+    when(mockAsrService.getText(anyString())).thenReturn("");
+    when(inputMessageRepository.findById(32L)).thenReturn(Optional.of(entity));
+    when(inputMessageRepository.save(any(InputMessageEntity.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+    when(embeddingModel.embed(any(TextSegment.class)))
+        .thenReturn(Response.from(Embedding.from(new float[] {0.1f, 0.2f})));
+    doAnswer(invocation -> {
+      Runnable runnable = invocation.getArgument(0);
+      runnable.run();
+      return null;
+    }).when(taskExecutor).execute(any(Runnable.class));
+
+    JsonResult<?> result = inputMessageService.processMessage(32L, token);
+
+    Assertions.assertTrue(result.getSuccess());
+    Assertions.assertEquals("ingested", entity.getStatus());
+    Assertions.assertEquals("https://example.com/audio3.amr", entity.getNormalizedContent());
+    ArgumentCaptor<TextSegment> segmentCaptor = ArgumentCaptor.forClass(TextSegment.class);
+    verify(knowledgeChatEmbeddingStore).add(any(Embedding.class), segmentCaptor.capture());
+    Assertions.assertEquals("https://example.com/audio3.amr", segmentCaptor.getValue().text());
+  }
+
+  @Test
+  void processMessageShouldMintAttemptTokenAndIncrementCount() {
+    InputMessageEntity entity = new InputMessageEntity();
+    entity.setId(40L);
+    entity.setCreatedBy("smoke-user");
+    entity.setSessionId("session-attempt");
+    entity.setDedupeKey("dedupe-attempt");
+    entity.setContentType("text");
+    entity.setNormalizedContent("attempt counter test");
+    entity.setRawContent("attempt counter test");
+    entity.setStatus("received");
+    entity.setProcessingAttemptCount(0);
+
+    when(inputMessageRepository.findById(40L)).thenReturn(Optional.of(entity));
+    when(inputMessageRepository.save(any(InputMessageEntity.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+    when(embeddingModel.embed(any(TextSegment.class)))
+        .thenReturn(Response.from(Embedding.from(new float[] {0.1f, 0.2f})));
+    doAnswer(invocation -> {
+      Runnable runnable = invocation.getArgument(0);
+      runnable.run();
+      return null;
+    }).when(taskExecutor).execute(any(Runnable.class));
+
+    JsonResult<?> result = inputMessageService.processMessage(40L, token);
+
+    Assertions.assertTrue(result.getSuccess());
+    Assertions.assertEquals("ingested", entity.getStatus());
+    Assertions.assertEquals(1, entity.getProcessingAttemptCount());
+    Assertions.assertNull(entity.getProcessingAttemptToken(), "token cleared after finalization");
+  }
+
+  @Test
+  void processMessageAttemptTokenMismatchShouldSkipStatusFinalization() {
+    InputMessageEntity entity = new InputMessageEntity();
+    entity.setId(41L);
+    entity.setCreatedBy("smoke-user");
+    entity.setSessionId("session-stale-token");
+    entity.setDedupeKey("dedupe-stale-token");
+    entity.setContentType("text");
+    entity.setNormalizedContent("stale token test");
+    entity.setRawContent("stale token test");
+    entity.setStatus("received");
+    entity.setProcessingAttemptCount(1);
+    entity.setProcessingAttemptToken("old-token-xyz");
+
+    AtomicReference<InputMessageEntity> savedRef = new AtomicReference<>(entity);
+
+    when(inputMessageRepository.findById(41L)).thenAnswer(invocation -> Optional.of(savedRef.get()));
+    when(inputMessageRepository.save(any(InputMessageEntity.class)))
+        .thenAnswer(invocation -> {
+          InputMessageEntity saved = invocation.getArgument(0);
+          savedRef.set(saved);
+          return saved;
+        });
+    when(embeddingModel.embed(any(TextSegment.class)))
+        .thenReturn(Response.from(Embedding.from(new float[] {0.1f, 0.2f})));
+
+    doAnswer(invocation -> {
+      savedRef.get().setProcessingAttemptToken(null);
+      savedRef.get().setStatus("received");
+      Runnable runnable = invocation.getArgument(0);
+      runnable.run();
+      return null;
+    }).when(taskExecutor).execute(any(Runnable.class));
+
+    inputMessageService.processMessage(41L, token);
+
+    Assertions.assertEquals("received", savedRef.get().getStatus());
+    Assertions.assertNull(savedRef.get().getProcessingAttemptToken());
   }
 
   private InputMessageCreateParam buildValidCreateParam(String dedupeKey) {

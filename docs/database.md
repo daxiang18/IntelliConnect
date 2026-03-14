@@ -158,6 +158,8 @@ IntelliConnect 平台使用 MySQL 作为主要的关系型数据库，存储用�
 | status | VARCHAR | 处理状态：`received`、`processing`、`ingested`、`failed` |
 | received_at | BIGINT | 接收时间戳（毫秒） |
 | processing_started_at | BIGINT | 当前处理批次开始时间；仅 `status=processing` 时有值，历史记录可为空 |
+| processing_attempt_token | VARCHAR | 当前处理批次的唯一令牌（UUID）；仅 `status=processing` 时非空；用于在途任务完成时校验归属，防止过期任务覆盖状态 |
+| processing_attempt_count | INT | 累计处理尝试次数；每次进入 `processing` 状态时自增，不会随状态清除而重置 |
 | created_by | VARCHAR | 创建该消息的系统用户名 |
 | sync_targets | VARCHAR | 目标同步列表，逗号分隔；当前推荐 `feishu` |
 | sync_status | VARCHAR | 聚合同步状态：`not_requested`、`pending`、`synced`、`failed` |

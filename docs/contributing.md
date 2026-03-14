@@ -302,6 +302,47 @@ class UserServiceTest {
 - **社区论坛**: https://wordpress.rslly.top
 - **交流群**: 请参见项目 README
 
+## Chroma 向量存储验证通道（opt-in）
+
+默认情况下，单元测试和冒烟测试均使用**内存嵌入存储**，无需外部服务。
+如需验证真实 Chroma 实例的集成行为，可使用以下可选通道。
+
+### 本地快速运行
+
+```bash
+# 启动 Chroma 容器
+docker compose -f docker/docker-compose.chroma-validation.yml up -d
+
+# 运行验证集成测试
+CHROMA_VALIDATION_ENABLED=true ./mvnw -q -Dtest=ChromaEmbeddingStoreIT test
+
+# 或使用一键脚本（自动启停容器）
+bash scripts/run-chroma-validation.sh
+```
+
+### 环境变量
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `CHROMA_VALIDATION_ENABLED` | `false` | 设为 `true` 以启用集成测试 |
+| `CHROMA_VALIDATION_URL` | `http://127.0.0.1:18000` | Chroma 服务地址 |
+| `CHROMA_VALIDATION_PORT` | `18000` | Docker Compose 暴露的端口 |
+| `CHROMA_VALIDATION_IMAGE` | `chromadb/chroma:0.4.24` | Chroma 镜像版本 |
+
+### CI 手动触发
+
+在 GitHub Actions 页面选择 **Chroma Validation** 工作流，点击 **Run workflow** 即可。
+该工作流不影响默认的 `check` 流水线。
+
+### Spring Profile
+
+如需在应用启动时使用真实 Chroma（例如 staging 环境），添加 profile：
+
+```
+SPRING_PROFILES_ACTIVE=chroma-validation
+CHROMA_VALIDATION_URL=http://<chroma-host>:8000
+```
+
 ## 许可证
 
 本项目采用 Apache 2.0 许可证。贡献的代码也将遵循此许可证。

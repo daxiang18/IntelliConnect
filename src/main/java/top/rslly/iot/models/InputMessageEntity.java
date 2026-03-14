@@ -19,6 +19,7 @@
  */
 package top.rslly.iot.models;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import java.util.Objects;
 
@@ -43,6 +44,8 @@ public class InputMessageEntity {
   private Long syncedAt;
   private String externalReferencesJson;
   private Long processingStartedAt;
+  private String processingAttemptToken;
+  private int processingAttemptCount;
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -225,6 +228,27 @@ public class InputMessageEntity {
     this.processingStartedAt = processingStartedAt;
   }
 
+  @Basic
+  @JsonIgnore
+  @Column(name = "processing_attempt_token")
+  public String getProcessingAttemptToken() {
+    return processingAttemptToken;
+  }
+
+  public void setProcessingAttemptToken(String processingAttemptToken) {
+    this.processingAttemptToken = processingAttemptToken;
+  }
+
+  @Basic
+  @Column(name = "processing_attempt_count")
+  public int getProcessingAttemptCount() {
+    return processingAttemptCount;
+  }
+
+  public void setProcessingAttemptCount(int processingAttemptCount) {
+    this.processingAttemptCount = processingAttemptCount;
+  }
+
   @Override
   public boolean equals(Object o) {
     if (this == o)
@@ -244,13 +268,16 @@ public class InputMessageEntity {
         && Objects.equals(syncStatus, that.syncStatus)
         && Objects.equals(syncedAt, that.syncedAt)
         && Objects.equals(externalReferencesJson, that.externalReferencesJson)
-        && Objects.equals(processingStartedAt, that.processingStartedAt);
+        && Objects.equals(processingStartedAt, that.processingStartedAt)
+        && Objects.equals(processingAttemptToken, that.processingAttemptToken)
+        && processingAttemptCount == that.processingAttemptCount;
   }
 
   @Override
   public int hashCode() {
     return Objects.hash(id, sourceType, sourceAccountId, sessionId, senderId, contentType, rawContent,
         normalizedContent, attachmentsJson, dedupeKey, status, receivedAt, createdBy, syncTargets,
-        syncStatus, syncedAt, externalReferencesJson, processingStartedAt);
+        syncStatus, syncedAt, externalReferencesJson, processingStartedAt, processingAttemptToken,
+        processingAttemptCount);
   }
 }

@@ -39,6 +39,7 @@ public class InputMessageResponse {
   private long receivedAt;
   private Long processingStartedAt;
   private Long processingDurationMs;
+  private int processingAttemptCount;
   private List<String> syncTargets;
   private String syncStatus;
   private Long syncedAt;

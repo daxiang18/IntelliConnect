@@ -217,6 +217,67 @@ ai:
 通过以上步骤即可完成基础环境的搭建与配置，建议通过健康检查接口验证各服务连接状态。如果你需要
 控制家里的电气，你可以选择安装homeAssistant与本平台集成，它将帮助你管理家庭的电器，并提供流畅的体验。
 
+### 九、输入消息闭环与飞书同步
+
+近期分支补充了统一输入消息闭环，适合接入微信侧车、脚本导入和外部内容归档场景。
+
+#### 1. 输入消息闭环包含什么
+
+- 统一的输入消息接口：接收文本、URL、图片、语音等标准化内容
+- URL 内容归一化：自动抓取网页正文并入知识库
+- 自动标签：根据内容生成 `category` 和 `tags`
+- 可选飞书同步：处理后将内容写入飞书文档或飞书知识库节点
+
+#### 2. 启动 smoke 环境
+
+```bash
+docker compose -f docker/docker-compose.smoke.yml up -d
+```
+
+如你的环境仅支持旧命令，可改用：
+
+```bash
+docker-compose -f docker/docker-compose.smoke.yml up -d
+```
+
+#### 3. 检查域名与飞书配置
+
+```bash
+bash ./scripts/check-domain-config.sh
+```
+
+如需验证飞书同步，请先设置同一组 `FEISHU_*` 环境变量，再运行：
+
+```bash
+FEISHU_ENABLED=true \
+FEISHU_APP_ID=your-app-id \
+FEISHU_APP_SECRET=your-app-secret \
+bash ./scripts/check-feishu-config.sh
+```
+
+#### 4. 运行输入闭环烟雾测试
+
+无外部同步时：
+
+```bash
+bash ./scripts/smoke-input-flow.sh
+```
+
+验证飞书同步时：
+
+```bash
+INPUT_SMOKE_SYNC_TARGETS=feishu \
+INPUT_SMOKE_WAIT_FOR_SYNC=true \
+INPUT_SMOKE_EXPECTED_SYNC_STATUS=synced \
+bash ./scripts/smoke-input-flow.sh
+```
+
+#### 5. 推荐继续阅读
+
+- [输入消息闭环](../input_messages.md)
+- [飞书同步](../feishu_sync.md)
+- [故障排除](../troubleshooting.md#5-输入消息与飞书同步问题)
+
 ## 如何使用该平台内核
 安装部署后，启动后访问呢http://localhost:8080/swagger-ui/index.html
 即可获得完整的接口文档，使用这些接口既可以快速开发物联网应用，也可以作为基础模块来搭建物联网应用。

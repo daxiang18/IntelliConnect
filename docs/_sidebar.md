@@ -2,6 +2,8 @@
   - [:bookmark_tabs: 介绍](README.md)
   - [:clipboard: 系统架构](architecture.md#系统架构)
   - [:bookmark: 快速开始](get_started/quick_start.md#快速开始)
+  - [:inbox_tray: 输入消息闭环](input_messages.md#输入消息闭环)
+  - [:page_facing_up: 飞书同步](feishu_sync.md#飞书同步)
   - [:gear: API 文档](api.md#api-文档)
   - [:lock: 安全认证](security.md#安全与认证)
   - [:floppy_disk: 数据库架构](database.md#数据库架构)
@@ -14,5 +16,4 @@
   - [:bookmark_tabs: OTA升级](ota/common.md#OTA升级)
 - Mcp protocol
   - [:bookmark_tabs: 连接mcp服务器](mcp/connect_mcpServer.md#连接mcp服务器)
-
 

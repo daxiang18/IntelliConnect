@@ -139,6 +139,36 @@ IntelliConnect 平台使用 MySQL 作为主要的关系型数据库，存储用�
 | avatar | VARCHAR | 头像URL |
 | union_id | VARCHAR | 微信UnionID |
 
+### 11. 输入消息表 (input_message)
+
+统一存储来自微信侧车、脚本或其他外部入口的标准化输入消息。
+
+| 字段名 | 类型 | 说明 |
+|--------|------|------|
+| id | BIGINT (PK) | 输入消息唯一标识 |
+| source_type | VARCHAR | 输入来源类型，如 `wechat`、`manual`、`smoke` |
+| source_account_id | VARCHAR | 来源账号标识，如公众号 appid |
+| session_id | VARCHAR | 会话标识，用于分组与召回范围 |
+| sender_id | VARCHAR | 发送者标识 |
+| content_type | VARCHAR | 内容类型，如 `text`、`url`、`image`、`voice` |
+| raw_content | TEXT | 原始消息内容；对 URL 类型通常保存原始链接 |
+| normalized_content | TEXT | 归一化后的内容；URL 会在处理后写入正文摘要 |
+| attachments_json | TEXT | 附件列表的 JSON 表达 |
+| dedupe_key | VARCHAR (UNIQUE) | 去重键，保证消息幂等写入 |
+| status | VARCHAR | 处理状态：`received`、`processing`、`ingested`、`failed` |
+| received_at | BIGINT | 接收时间戳（毫秒） |
+| created_by | VARCHAR | 创建该消息的系统用户名 |
+| sync_targets | VARCHAR | 目标同步列表，逗号分隔；当前推荐 `feishu` |
+| sync_status | VARCHAR | 聚合同步状态：`not_requested`、`pending`、`synced`、`failed` |
+| synced_at | BIGINT | 最近一次成功同步时间戳（毫秒） |
+| external_references_json | TEXT | 外部系统引用信息，如飞书文档 ID、URL、错误原因 |
+
+**补充说明:**
+
+- `sync_targets` 可接受 `feishu`、`github` 两类值，但当前仅实现 `feishu` 的实际同步。
+- 自动分类 `category` 与标签 `tags` 不落 MySQL 字段，而是作为向量库元数据写入召回结果中。
+- `url` 类型在写入向量库前会优先抓取网页正文；若抓取失败，会保留原始链接摘要作为兜底内容。
+
 ## 数据库关系
 
 ```

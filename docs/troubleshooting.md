@@ -187,6 +187,59 @@ cat application.yaml | grep -A 10 wx
 curl -v https://your-domain.com/api/v2/wechat/callback
 ```
 
+### 5. 输入消息与飞书同步问题
+
+#### 问题: URL 消息处理后没有正文
+**症状**: `contentType=url` 的消息成功创建，但 `normalizedContent` 仍然只有链接或简短摘要。
+
+**排查步骤**:
+1. 检查目标 URL 是否可被后端服务访问
+2. 确认返回内容不是登录页、拦截页或纯跳转页
+3. 检查 URL 返回的 `Content-Type` 是否为 HTML、纯文本、JSON、XML 或 Markdown
+
+**说明**:
+- URL 抓取失败时，系统会优先保留原始链接内容，必要时会附加 `## 原始链接消息` 作为兜底信息
+- 如需验证整条链路，优先使用 `bash ./scripts/smoke-input-flow.sh`
+
+#### 问题: syncStatus 一直是 pending
+**症状**: 消息已进入 `ingested`，但 `syncStatus` 没有变成 `synced`。
+
+**排查步骤**:
+1. 检查 `syncTargets` 是否只配置了 `github`
+2. 若需要飞书同步，确认 `syncTargets` 包含 `feishu`
+3. 通过 `/api/v2/input/messages/by-dedupe` 查看最新返回值
+
+**说明**:
+- 当前仅实现 `feishu` 的实际同步
+- `github` 目标值暂时只用于预留，不会触发同步动作，因此聚合同步状态可能保持 `pending`
+
+#### 问题: 飞书同步失败
+**症状**: `status=ingested`，但 `syncStatus=failed`，或者 `externalReferencesJson` 中出现错误信息。
+
+**排查步骤**:
+1. 运行 `bash ./scripts/check-feishu-config.sh`
+2. 确认后端启动时带上了相同的 `FEISHU_*` 环境变量
+3. 检查 `FEISHU_SYNC_MODE` 为 `doc` 还是 `wiki`
+4. 若使用 `wiki` 模式，确认 `FEISHU_WIKI_SPACE_ID` 和 `FEISHU_WIKI_PARENT_NODE_TOKEN` 已配置
+5. 检查 `FEISHU_WEB_BASE_URL` 是否正确，避免回写的文档链接不可用
+
+#### 问题: 输入闭环或测试启动时报 JsonParseException，提示遇到字符 `<`
+**症状**: 日志中出现 `Unexpected character ('<' ...)`，通常发生在知识库/向量库初始化或写入阶段。
+
+**排查步骤**:
+1. 检查 `rag.knowledge_chat_embeddingStore_url` 是否指向真实 Chroma API，而不是 HTML 页面
+2. 访问对应地址，确认返回 JSON 而非登录页、网关错误页或 404 HTML
+3. 检查 smoke 环境中的 `SMOKE_CHROMA_URL` 是否与容器映射端口一致
+
+**解决方案**:
+```bash
+# 检查 smoke 环境中的 Chroma 地址
+echo "$SMOKE_CHROMA_URL"
+
+# 检查后端配置
+cat src/main/resources/application.yaml | grep -A 5 knowledge_chat_embeddingStore_url
+```
+
 ## 性能优化
 
 ### 1. 数据库性能问题

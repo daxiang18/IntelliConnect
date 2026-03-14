@@ -1703,6 +1703,174 @@ DELETE /alarmEvent
 Authorization: Bearer {token}
 ```
 
+## 输入消息闭环
+
+输入消息接口位于 `/api/v2/input` 下，面向微信侧车、脚本接入和其他外部输入源，提供统一的接收、处理、召回和长期记忆提升能力。
+
+### 接收标准化输入消息
+
+```
+POST /input/messages
+```
+
+**请求头:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**请求参数:**
+```json
+{
+  "sourceType": "wechat",
+  "sourceAccountId": "gh_xxx",
+  "sessionId": "wechat:gh_xxx:user-open-id",
+  "senderId": "user-open-id",
+  "contentType": "url",
+  "rawContent": "https://example.com/article",
+  "normalizedContent": "[链接] Example article https://example.com/article",
+  "dedupeKey": "wechat:gh_xxx:user-open-id:msg-1001",
+  "syncTargets": "feishu"
+}
+```
+
+**说明:**
+
+- `contentType` 当前常见值为 `text`、`url`、`image`、`voice`
+- `syncTargets` 为逗号分隔字符串，当前建议使用 `feishu`
+- `github` 目标值已被模型接受，但当前不会执行实际同步
+
+**响应示例:**
+```json
+{
+  "success": true,
+  "errorCode": 200,
+  "errorMsg": "成功",
+  "data": {
+    "id": 1001,
+    "sourceType": "wechat",
+    "sessionId": "wechat:gh_xxx:user-open-id",
+    "contentType": "url",
+    "rawContent": "https://example.com/article",
+    "normalizedContent": "[链接] Example article https://example.com/article",
+    "dedupeKey": "wechat:gh_xxx:user-open-id:msg-1001",
+    "status": "received",
+    "receivedAt": 1716000000000,
+    "syncTargets": [
+      "feishu"
+    ],
+    "syncStatus": "pending",
+    "syncedAt": null,
+    "externalReferencesJson": null,
+    "category": "reference",
+    "tags": [
+      "url",
+      "example.com",
+      "reference"
+    ]
+  }
+}
+```
+
+### 按去重键查询输入消息
+
+```
+GET /input/messages/by-dedupe?dedupeKey={dedupeKey}
+```
+
+**请求头:**
+```
+Authorization: Bearer {token}
+```
+
+**用途:**
+
+- 用于轮询处理状态
+- 可配合 smoke 脚本验证是否已成功入库、入向量库、完成飞书同步
+
+### 按会话查询输入消息列表
+
+```
+GET /input/messages/by-session?sessionId={sessionId}
+```
+
+**请求头:**
+```
+Authorization: Bearer {token}
+```
+
+### 触发输入消息处理
+
+```
+POST /input/messages/{id}/process
+```
+
+**请求头:**
+```
+Authorization: Bearer {token}
+```
+
+**处理流程:**
+
+1. 将消息状态更新为 `processing`
+2. `url` 类型会先执行网页内容归一化
+3. 将整理后的内容写入知识向量库
+4. 自动补充 `category` 与 `tags`
+5. 若 `syncTargets` 包含 `feishu`，则继续执行飞书同步
+6. 最终消息状态进入 `ingested` 或 `failed`
+
+### 语义召回输入消息
+
+```
+POST /input/messages/recall
+```
+
+**请求头:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**请求参数:**
+```json
+{
+  "query": "帮我找一下昨天同步过的飞书文档",
+  "sessionId": "wechat:gh_xxx:user-open-id"
+}
+```
+
+**响应字段补充:**
+
+- `category`: 自动识别出的内容分类，如 `reference`、`knowledge`、`task`
+- `tags`: 自动生成的标签列表，可包含内容类型、来源域名、主题标签等
+
+### 提升输入消息为长期记忆
+
+```
+POST /input/messages/{id}/promote-to-memory
+```
+
+**请求头:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**请求参数:**
+```json
+{
+  "productId": 9,
+  "memoryKey": "input:wechat:gh_xxx:user-open-id",
+  "description": "从输入闭环提升的长期记忆",
+  "memoryValue": "可选，不传时默认使用已入库内容"
+}
+```
+
+更多字段说明可参考：
+
+- [输入消息闭环](input_messages.md)
+- [飞书同步](feishu_sync.md)
+
 **响应示例:**
 ```json
 {

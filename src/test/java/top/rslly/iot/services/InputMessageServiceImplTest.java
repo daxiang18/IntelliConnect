@@ -32,6 +32,7 @@ import top.rslly.iot.param.request.InputMessageRecallParam;
 import top.rslly.iot.param.response.AgentLongMemoryResponse;
 import top.rslly.iot.param.response.InputMessageRecallItemResponse;
 import top.rslly.iot.param.response.InputMessageResponse;
+import top.rslly.iot.services.agent.AiService;
 import top.rslly.iot.services.agent.AgentLongMemoryServiceImpl;
 import top.rslly.iot.utility.JwtTokenUtil;
 import top.rslly.iot.utility.input.InputContentAutoTagger;
@@ -65,6 +66,8 @@ class InputMessageServiceImplTest {
   private TaskExecutor taskExecutor;
   @Mock
   private AgentLongMemoryServiceImpl agentLongMemoryService;
+  @Mock
+  private AiService aiService;
   @Mock
   private UrlContentNormalizer urlContentNormalizer;
   @Mock
@@ -432,6 +435,45 @@ class InputMessageServiceImplTest {
   }
 
   @Test
+  void processMessageShouldTrackProcessingStartedAtWhileQueued() {
+    InputMessageEntity entity = new InputMessageEntity();
+    entity.setId(19L);
+    entity.setCreatedBy("smoke-user");
+    entity.setSessionId("session-processing");
+    entity.setDedupeKey("dedupe-processing");
+    entity.setContentType("text");
+    entity.setNormalizedContent("排查 processing 卡住");
+    entity.setRawContent("排查 processing 卡住");
+    entity.setStatus("received");
+
+    AtomicReference<Runnable> queuedTask = new AtomicReference<>();
+    when(inputMessageRepository.findById(19L)).thenReturn(Optional.of(entity));
+    when(inputMessageRepository.save(any(InputMessageEntity.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+    when(embeddingModel.embed(any(TextSegment.class)))
+        .thenReturn(Response.from(Embedding.from(new float[] {0.1f, 0.2f})));
+    doAnswer(invocation -> {
+      queuedTask.set(invocation.getArgument(0));
+      return null;
+    }).when(taskExecutor).execute(any(Runnable.class));
+
+    JsonResult<?> result = inputMessageService.processMessage(19L, token);
+
+    Assertions.assertTrue(result.getSuccess());
+    Assertions.assertEquals("processing", entity.getStatus());
+    Assertions.assertNotNull(entity.getProcessingStartedAt());
+    Assertions.assertTrue(result.getData() instanceof InputMessageEntity);
+    InputMessageEntity queuedEntity = (InputMessageEntity) result.getData();
+    Assertions.assertEquals(entity.getProcessingStartedAt(), queuedEntity.getProcessingStartedAt());
+    Assertions.assertNotNull(queuedTask.get());
+
+    queuedTask.get().run();
+
+    Assertions.assertEquals("ingested", entity.getStatus());
+    Assertions.assertNull(entity.getProcessingStartedAt());
+  }
+
+  @Test
   void processMessageShouldRejectOtherUsers() {
     InputMessageEntity entity = new InputMessageEntity();
     entity.setId(2L);
@@ -707,14 +749,28 @@ class InputMessageServiceImplTest {
   }
 
   @Test
-  void bridgeWechatImageMessageShouldStoreAttachmentWithoutProcessing() {
+  void bridgeWechatImageMessageShouldEnrichAndProcess() {
+    AtomicReference<InputMessageEntity> savedRef = new AtomicReference<>();
     when(inputMessageRepository.findFirstByDedupeKey(any())).thenReturn(Optional.empty());
     when(inputMessageRepository.save(any(InputMessageEntity.class)))
         .thenAnswer(invocation -> {
           InputMessageEntity entity = invocation.getArgument(0);
-          entity.setId(6L);
+          if (entity.getId() == 0L) {
+            entity.setId(6L);
+          }
+          savedRef.set(entity);
           return entity;
         });
+    when(inputMessageRepository.findById(6L)).thenAnswer(invocation -> Optional.of(savedRef.get()));
+    when(aiService.getAiVisionIntent(ArgumentMatchers.anyString(), ArgumentMatchers.eq("https://example.com/image.jpg")))
+        .thenReturn("{\"success\":true,\"text\":\"白板上写着本周发布计划\"}");
+    when(embeddingModel.embed(any(TextSegment.class)))
+        .thenReturn(Response.from(Embedding.from(new float[] {0.1f, 0.2f})));
+    doAnswer(invocation -> {
+      Runnable runnable = invocation.getArgument(0);
+      runnable.run();
+      return null;
+    }).when(taskExecutor).execute(any(Runnable.class));
 
     JsonResult<?> result = inputMessageService.bridgeWechatImageMessage("wx-app", "openid-2",
         "wx-user-name", "https://example.com/image.jpg", "msg-2");
@@ -722,10 +778,52 @@ class InputMessageServiceImplTest {
     Assertions.assertTrue(result.getSuccess());
     InputMessageEntity entity = (InputMessageEntity) result.getData();
     Assertions.assertEquals("image", entity.getContentType());
-    Assertions.assertEquals("received", entity.getStatus());
+    Assertions.assertEquals("ingested", entity.getStatus());
+    Assertions.assertTrue(entity.getNormalizedContent().contains("本周发布计划"));
+    Assertions.assertTrue(entity.getNormalizedContent().contains("https://example.com/image.jpg"));
     Assertions.assertTrue(entity.getAttachmentsJson().contains("\"name\":\"image\""));
     Assertions.assertTrue(entity.getAttachmentsJson().contains("\"url\":\"https://example.com/image.jpg\""));
-    verify(taskExecutor, never()).execute(any(Runnable.class));
+    ArgumentCaptor<TextSegment> segmentCaptor = ArgumentCaptor.forClass(TextSegment.class);
+    verify(knowledgeChatEmbeddingStore).add(any(Embedding.class), segmentCaptor.capture());
+    Assertions.assertTrue(segmentCaptor.getValue().text().contains("本周发布计划"));
+    verify(aiService).getAiVisionIntent(ArgumentMatchers.anyString(),
+        ArgumentMatchers.eq("https://example.com/image.jpg"));
+  }
+
+  @Test
+  void processImageMessageShouldFallbackToOriginalContentWhenVisionFails() {
+    InputMessageEntity entity = new InputMessageEntity();
+    entity.setId(19L);
+    entity.setCreatedBy("smoke-user");
+    entity.setSessionId("session-image");
+    entity.setDedupeKey("dedupe-image");
+    entity.setContentType("image");
+    entity.setRawContent("https://example.com/image.jpg");
+    entity.setNormalizedContent("https://example.com/image.jpg");
+    entity.setStatus("received");
+
+    when(inputMessageRepository.findById(19L)).thenReturn(Optional.of(entity));
+    when(inputMessageRepository.save(any(InputMessageEntity.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+    when(aiService.getAiVisionIntent(ArgumentMatchers.anyString(),
+        ArgumentMatchers.eq("https://example.com/image.jpg")))
+        .thenReturn("{\"success\":false,\"message\":\"图片下载失败\"}");
+    when(embeddingModel.embed(any(TextSegment.class)))
+        .thenReturn(Response.from(Embedding.from(new float[] {0.1f, 0.2f})));
+    doAnswer(invocation -> {
+      Runnable runnable = invocation.getArgument(0);
+      runnable.run();
+      return null;
+    }).when(taskExecutor).execute(any(Runnable.class));
+
+    JsonResult<?> result = inputMessageService.processMessage(19L, token);
+
+    Assertions.assertTrue(result.getSuccess());
+    Assertions.assertEquals("ingested", entity.getStatus());
+    Assertions.assertEquals("https://example.com/image.jpg", entity.getNormalizedContent());
+    ArgumentCaptor<TextSegment> segmentCaptor = ArgumentCaptor.forClass(TextSegment.class);
+    verify(knowledgeChatEmbeddingStore).add(any(Embedding.class), segmentCaptor.capture());
+    Assertions.assertEquals("https://example.com/image.jpg", segmentCaptor.getValue().text());
   }
 
   @Test
@@ -796,8 +894,35 @@ class InputMessageServiceImplTest {
     Assertions.assertEquals(List.of("feishu", "github"), dto.getSyncTargets());
     Assertions.assertEquals("pending", dto.getSyncStatus());
     Assertions.assertEquals(Long.valueOf(1716000001000L), dto.getSyncedAt());
+    Assertions.assertNull(dto.getProcessingStartedAt());
+    Assertions.assertNull(dto.getProcessingDurationMs());
     Assertions.assertEquals("{\"github\":{\"issueUrl\":\"https://github.com/demo/issues/1\"}}",
         dto.getExternalReferencesJson());
+  }
+
+  @Test
+  void getMessageByDedupeKeyShouldExposeProcessingTimingFields() {
+    InputMessageEntity entity = new InputMessageEntity();
+    entity.setId(24L);
+    entity.setCreatedBy("smoke-user");
+    entity.setContentType("text");
+    entity.setDedupeKey("dedupe-processing-dto");
+    entity.setSessionId("session-processing-dto");
+    entity.setNormalizedContent("处理仍在进行中");
+    entity.setStatus("processing");
+    entity.setReceivedAt(System.currentTimeMillis() - 65_000L);
+    entity.setProcessingStartedAt(null);
+
+    when(inputMessageRepository.findFirstByDedupeKeyAndCreatedBy("dedupe-processing-dto", "smoke-user"))
+        .thenReturn(Optional.of(entity));
+
+    JsonResult<?> result = inputMessageService.getMessageByDedupeKey("dedupe-processing-dto", token);
+
+    Assertions.assertTrue(result.getSuccess());
+    InputMessageResponse dto = (InputMessageResponse) result.getData();
+    Assertions.assertEquals(Long.valueOf(entity.getReceivedAt()), dto.getProcessingStartedAt());
+    Assertions.assertNotNull(dto.getProcessingDurationMs());
+    Assertions.assertTrue(dto.getProcessingDurationMs() >= 65_000L);
   }
 
   @Test
@@ -827,6 +952,8 @@ class InputMessageServiceImplTest {
     Assertions.assertEquals("ingested", dtos.get(0).getStatus());
     Assertions.assertTrue(dtos.get(0).getSyncTargets().isEmpty());
     Assertions.assertEquals("not_requested", dtos.get(0).getSyncStatus());
+    Assertions.assertNull(dtos.get(0).getProcessingStartedAt());
+    Assertions.assertNull(dtos.get(0).getProcessingDurationMs());
     Assertions.assertEquals(12L, dtos.get(1).getId());
     Assertions.assertEquals("received", dtos.get(1).getStatus());
   }
@@ -875,6 +1002,68 @@ class InputMessageServiceImplTest {
     verify(inputMessageRepository, never()).findAllBySessionIdAndCreatedBy(
         org.mockito.ArgumentMatchers.eq("session-page"),
         org.mockito.ArgumentMatchers.eq("smoke-user"),
+        any(Pageable.class));
+  }
+
+  @Test
+  void getStaleProcessingMessagesShouldReturnSessionScopedDtos() {
+    InputMessageEntity stale = new InputMessageEntity();
+    stale.setId(25L);
+    stale.setCreatedBy("smoke-user");
+    stale.setSessionId("session-stale");
+    stale.setStatus("processing");
+    stale.setContentType("text");
+    stale.setDedupeKey("dedupe-stale");
+    stale.setNormalizedContent("这是一个疑似卡住的任务");
+    stale.setReceivedAt(1716000003000L);
+    stale.setProcessingStartedAt(System.currentTimeMillis() - 31 * 60_000L);
+    stale.setSyncTargets("feishu");
+    stale.setSyncStatus("pending");
+
+    when(inputMessageRepository.findAllBySessionIdAndCreatedByAndStatusAndProcessingStartedAtLessThanEqual(
+        org.mockito.ArgumentMatchers.eq("session-stale"),
+        org.mockito.ArgumentMatchers.eq("smoke-user"),
+        org.mockito.ArgumentMatchers.eq("processing"),
+        org.mockito.ArgumentMatchers.anyLong(),
+        any(Pageable.class)))
+            .thenReturn(new PageImpl<>(List.of(stale)));
+
+    JsonResult<?> result = inputMessageService.getStaleProcessingMessages("session-stale", 30, 5, token);
+
+    Assertions.assertTrue(result.getSuccess());
+    @SuppressWarnings("unchecked")
+    List<InputMessageResponse> dtos = (List<InputMessageResponse>) result.getData();
+    Assertions.assertEquals(1, dtos.size());
+    Assertions.assertEquals(25L, dtos.get(0).getId());
+    Assertions.assertEquals(stale.getProcessingStartedAt(), dtos.get(0).getProcessingStartedAt());
+    Assertions.assertNotNull(dtos.get(0).getProcessingDurationMs());
+    ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+    verify(inputMessageRepository).findAllBySessionIdAndCreatedByAndStatusAndProcessingStartedAtLessThanEqual(
+        org.mockito.ArgumentMatchers.eq("session-stale"),
+        org.mockito.ArgumentMatchers.eq("smoke-user"),
+        org.mockito.ArgumentMatchers.eq("processing"),
+        org.mockito.ArgumentMatchers.anyLong(),
+        pageableCaptor.capture());
+    Assertions.assertEquals(0, pageableCaptor.getValue().getPageNumber());
+    Assertions.assertEquals(5, pageableCaptor.getValue().getPageSize());
+  }
+
+  @Test
+  void getStaleProcessingMessagesShouldRejectInvalidArguments() {
+    JsonResult<?> result = inputMessageService.getStaleProcessingMessages("session-stale", 0, 101, token);
+
+    Assertions.assertFalse(result.getSuccess());
+    Assertions.assertEquals(ResultCode.PARAM_NOT_VALID.getCode(), result.getErrorCode());
+    verify(inputMessageRepository, never()).findAllByCreatedByAndStatusAndProcessingStartedAtLessThanEqual(
+        org.mockito.ArgumentMatchers.eq("smoke-user"),
+        org.mockito.ArgumentMatchers.eq("processing"),
+        org.mockito.ArgumentMatchers.anyLong(),
+        any(Pageable.class));
+    verify(inputMessageRepository, never()).findAllBySessionIdAndCreatedByAndStatusAndProcessingStartedAtLessThanEqual(
+        org.mockito.ArgumentMatchers.eq("session-stale"),
+        org.mockito.ArgumentMatchers.eq("smoke-user"),
+        org.mockito.ArgumentMatchers.eq("processing"),
+        org.mockito.ArgumentMatchers.anyLong(),
         any(Pageable.class));
   }
 

@@ -164,6 +164,7 @@ smtp邮件服务器配置，需要到邮箱服务商申请，并配置好相关�
 ```yaml
 rag:
     embedding_modelName: bge-small-zh-v1.5-quantized
+    knowledge_chat_embeddingStore_in_memory: false # smoke / test 可设为 true，减少对外部 Chroma 的依赖
     knowledge_chat_embeddingStore_url: http://localhost:8000[你的向量数据库地址]
 ```
 ### 八、联网搜索selenium安装（最新版本已废弃）

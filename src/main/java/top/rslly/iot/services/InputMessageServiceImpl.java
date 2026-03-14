@@ -44,6 +44,7 @@ import top.rslly.iot.param.request.InputMessageRecallParam;
 import top.rslly.iot.param.response.InputMessageRecallItemResponse;
 import top.rslly.iot.param.response.InputMessageResponse;
 import top.rslly.iot.services.agent.AgentLongMemoryServiceImpl;
+import top.rslly.iot.services.agent.AiService;
 import top.rslly.iot.utility.input.InputContentAutoTagger;
 import top.rslly.iot.utility.JwtTokenUtil;
 import top.rslly.iot.utility.ai.rag.RagUtility;
@@ -86,10 +87,15 @@ public class InputMessageServiceImpl implements InputMessageService {
   private static final int DEFAULT_SESSION_QUERY_PAGE = 0;
   private static final int DEFAULT_SESSION_QUERY_SIZE = 50;
   private static final int MAX_SESSION_QUERY_SIZE = 100;
+  private static final int DEFAULT_STALE_PROCESSING_MINUTES = 30;
+  private static final int DEFAULT_STALE_PROCESSING_LIMIT = 20;
+  private static final int MAX_STALE_PROCESSING_LIMIT = 100;
   private static final String WECHAT_IMAGE_ATTACHMENT_NAME = "image";
   private static final String WECHAT_VOICE_ATTACHMENT_NAME = "voice";
   private static final String WECHAT_IMAGE_MIME_TYPE = "image/jpeg";
   private static final String WECHAT_VOICE_MIME_TYPE = "audio/amr";
+  private static final String IMAGE_SEARCH_PROMPT =
+      "请提取这张图片里对检索最有帮助的信息，包括可见文字、主要物体、场景和关键线索，使用简洁中文输出。";
   private static final Set<String> SUPPORTED_SYNC_TARGETS = Set.of(SYNC_TARGET_FEISHU);
 
   @Resource
@@ -103,6 +109,8 @@ public class InputMessageServiceImpl implements InputMessageService {
   private TaskExecutor taskExecutor;
   @Autowired
   private AgentLongMemoryServiceImpl agentLongMemoryService;
+  @Autowired
+  private AiService aiService;
   @Autowired
   private UrlContentNormalizer urlContentNormalizer;
   @Autowired
@@ -181,9 +189,18 @@ public class InputMessageServiceImpl implements InputMessageService {
 
   private void updateStatus(long id, String status) {
     inputMessageRepository.findById(id).ifPresent(entity -> {
-      entity.setStatus(status);
+      applyStatus(entity, status, null);
       inputMessageRepository.save(entity);
     });
+  }
+
+  private void applyStatus(InputMessageEntity entity, String status, Long processingStartedAt) {
+    entity.setStatus(status);
+    if (STATUS_PROCESSING.equals(status)) {
+      entity.setProcessingStartedAt(processingStartedAt == null ? System.currentTimeMillis() : processingStartedAt);
+      return;
+    }
+    entity.setProcessingStartedAt(null);
   }
 
   private String resolvePromotedMemoryValue(InputMessageEntity entity, InputMessagePromoteParam param) {
@@ -223,6 +240,71 @@ public class InputMessageServiceImpl implements InputMessageService {
           normalizedResult.failureReason());
     }
     return normalizedContent;
+  }
+
+  private String extractVisionText(String aiVisionResponse) {
+    if (aiVisionResponse == null || aiVisionResponse.isBlank()) {
+      return null;
+    }
+    if (!aiVisionResponse.trim().startsWith("{")) {
+      return null;
+    }
+    try {
+      JSONObject visionResult = JSON.parseObject(aiVisionResponse);
+      if (visionResult == null || !Boolean.TRUE.equals(visionResult.getBoolean("success"))) {
+        return null;
+      }
+      String text = visionResult.getString("text");
+      return text == null || text.isBlank() ? null : text.trim();
+    } catch (Exception e) {
+      log.warn("image vision response parse failed, errorType={}", e.getClass().getSimpleName());
+      return null;
+    }
+  }
+
+  private String buildImageSearchableContent(String imageUrl, String existingContent, String visionText) {
+    String normalizedExistingContent = existingContent == null ? null : existingContent.trim();
+    boolean hasDistinctExistingContent = normalizedExistingContent != null && !normalizedExistingContent.isBlank()
+        && !normalizedExistingContent.equals(imageUrl);
+    StringBuilder contentBuilder = new StringBuilder();
+    if (hasDistinctExistingContent) {
+      contentBuilder.append("## 原始图片描述\n")
+          .append(normalizedExistingContent)
+          .append("\n\n");
+    }
+    contentBuilder.append("## 图片内容摘要\n")
+        .append(visionText.trim());
+    if (imageUrl != null && !imageUrl.isBlank()) {
+      contentBuilder.append("\n\n## 原始图片链接\n")
+          .append(imageUrl);
+    }
+    return contentBuilder.toString();
+  }
+
+  private String resolveImageContentForIngest(InputMessageEntity entity) {
+    String imageUrl = entity.getRawContent();
+    String fallbackContent = entity.getNormalizedContent();
+    if (fallbackContent == null || fallbackContent.isBlank()) {
+      fallbackContent = imageUrl;
+    }
+    if (imageUrl == null || imageUrl.isBlank()) {
+      return fallbackContent;
+    }
+
+    String aiVisionResponse = aiService.getAiVisionIntent(IMAGE_SEARCH_PROMPT, imageUrl);
+    String visionText = extractVisionText(aiVisionResponse);
+    if (visionText == null || visionText.isBlank()) {
+      log.warn("image vision enrichment skipped, messageId={}, dedupeKey={}, sessionId={}",
+          entity.getId(), entity.getDedupeKey(), entity.getSessionId());
+      return fallbackContent;
+    }
+
+    String enrichedContent = buildImageSearchableContent(imageUrl, entity.getNormalizedContent(), visionText);
+    entity.setNormalizedContent(enrichedContent);
+    inputMessageRepository.save(entity);
+    log.info("image content enriched, messageId={}, dedupeKey={}, sessionId={}, contentLength={}",
+        entity.getId(), entity.getDedupeKey(), entity.getSessionId(), enrichedContent.length());
+    return enrichedContent;
   }
 
   private InputContentAutoTagger.AutoTagResult resolveAutoTagResult(String contentType, String rawContent,
@@ -323,6 +405,10 @@ public class InputMessageServiceImpl implements InputMessageService {
     InputContentAutoTagger.AutoTagResult autoTagResult =
         resolveAutoTagResult(entity.getContentType(), entity.getRawContent(), entity.getNormalizedContent());
     String syncTargets = entity.getSyncTargets();
+    Long processingStartedAt = entity.getProcessingStartedAt();
+    if (STATUS_PROCESSING.equals(entity.getStatus()) && processingStartedAt == null) {
+      processingStartedAt = entity.getReceivedAt();
+    }
     InputMessageResponse response = new InputMessageResponse();
     response.setId(entity.getId());
     response.setSourceType(entity.getSourceType());
@@ -336,6 +422,10 @@ public class InputMessageServiceImpl implements InputMessageService {
     response.setDedupeKey(entity.getDedupeKey());
     response.setStatus(entity.getStatus());
     response.setReceivedAt(entity.getReceivedAt());
+    response.setProcessingStartedAt(processingStartedAt);
+    if (STATUS_PROCESSING.equals(entity.getStatus()) && processingStartedAt != null) {
+      response.setProcessingDurationMs(Math.max(0L, System.currentTimeMillis() - processingStartedAt));
+    }
     response.setSyncTargets(inputContentAutoTagger.parseTags(syncTargets));
     response.setSyncStatus(resolveSyncStatus(syncTargets, entity.getSyncStatus()));
     response.setSyncedAt(entity.getSyncedAt());
@@ -407,12 +497,13 @@ public class InputMessageServiceImpl implements InputMessageService {
             : inputMessageCreateParam.getNormalizedContent());
     entity.setAttachmentsJson(JSON.toJSONString(inputMessageCreateParam.getAttachments()));
     entity.setDedupeKey(inputMessageCreateParam.getDedupeKey());
-    entity.setStatus(inputMessageCreateParam.getStatus() == null || inputMessageCreateParam.getStatus().isBlank()
+    String initialStatus = inputMessageCreateParam.getStatus() == null || inputMessageCreateParam.getStatus().isBlank()
         ? STATUS_RECEIVED
-        : inputMessageCreateParam.getStatus());
+        : inputMessageCreateParam.getStatus();
     entity.setReceivedAt(inputMessageCreateParam.getReceivedAt() == null
         ? System.currentTimeMillis()
         : inputMessageCreateParam.getReceivedAt());
+    applyStatus(entity, initialStatus, entity.getReceivedAt());
     entity.setCreatedBy(username);
     entity.setSyncTargets(normalizedSyncTargets);
     entity.setSyncStatus(resolveSyncStatus(normalizedSyncTargets, null));
@@ -449,7 +540,8 @@ public class InputMessageServiceImpl implements InputMessageService {
       return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
     }
 
-    entity.setStatus(STATUS_PROCESSING);
+    long processingStartedAt = System.currentTimeMillis();
+    applyStatus(entity, STATUS_PROCESSING, processingStartedAt);
     InputMessageEntity savedEntity = inputMessageRepository.save(entity);
     String sessionId = entity.getSessionId();
     String dedupeKey = entity.getDedupeKey();
@@ -458,16 +550,22 @@ public class InputMessageServiceImpl implements InputMessageService {
     String rawContent = entity.getRawContent();
     String syncTargets = entity.getSyncTargets();
 
-    log.info("input message processing queued, id={}, dedupeKey={}, sessionId={}, contentType={}, syncTargets={}, user={}",
-        id, dedupeKey, sessionId, contentType, syncTargets, username);
+    log.info(
+        "input message processing queued, id={}, dedupeKey={}, sessionId={}, contentType={}, syncTargets={}, processingStartedAt={}, user={}",
+        id, dedupeKey, sessionId, contentType, syncTargets, processingStartedAt, username);
 
     taskExecutor.execute(() -> {
-      log.info("input message processing started, id={}, dedupeKey={}, sessionId={}, contentType={}", id,
-          dedupeKey, sessionId, contentType);
+      log.info("input message processing started, id={}, dedupeKey={}, sessionId={}, contentType={}, processingStartedAt={}",
+          id, dedupeKey, sessionId, contentType, processingStartedAt);
       try {
-        String contentToIngest = isUrlContentType(contentType)
-            ? resolveUrlContentForIngest(entity)
-            : entity.getNormalizedContent();
+        String contentToIngest;
+        if (isUrlContentType(contentType)) {
+          contentToIngest = resolveUrlContentForIngest(entity);
+        } else if (CONTENT_TYPE_IMAGE.equalsIgnoreCase(contentType)) {
+          contentToIngest = resolveImageContentForIngest(entity);
+        } else {
+          contentToIngest = entity.getNormalizedContent();
+        }
         if (contentToIngest == null || contentToIngest.isBlank()) {
           contentToIngest = rawContent;
         }
@@ -621,7 +719,17 @@ public class InputMessageServiceImpl implements InputMessageService {
     inputMessageCreateParam.setNormalizedContent(imageUrl);
     inputMessageCreateParam.setAttachments(List.of(attachment));
     inputMessageCreateParam.setDedupeKey(buildWechatDedupeKey(appid, openid, externalMessageId));
-    return createMessageForUsername(inputMessageCreateParam, username);
+
+    JsonResult<?> createResult = createMessageForUsername(inputMessageCreateParam, username);
+    if (!createResult.getSuccess() || !(createResult.getData() instanceof InputMessageEntity entity)) {
+      return createResult;
+    }
+
+    JsonResult<?> processResult = processMessageForUsername(entity.getId(), username);
+    if (!processResult.getSuccess()) {
+      return processResult;
+    }
+    return ResultTool.success(entity);
   }
 
   @Transactional(rollbackFor = Exception.class)
@@ -713,6 +821,21 @@ public class InputMessageServiceImpl implements InputMessageService {
     return getMessagesBySessionIdForUsername(sessionId, page, size, username);
   }
 
+  @Override
+  public JsonResult<?> getStaleProcessingMessages(String sessionId, Integer olderThanMinutes, Integer limit,
+      String token) {
+    String username;
+    try {
+      username = resolveUsername(token);
+    } catch (Exception e) {
+      log.warn("get stale processing messages failed to parse token, sessionId={}, olderThanMinutes={}, limit={}",
+          sessionId, olderThanMinutes, limit, e);
+      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
+    }
+
+    return getStaleProcessingMessagesForUsername(sessionId, olderThanMinutes, limit, username);
+  }
+
   private JsonResult<?> getMessagesBySessionIdForUsername(String sessionId, Integer page, Integer size,
       String username) {
     if (page == null && size == null) {
@@ -739,6 +862,33 @@ public class InputMessageServiceImpl implements InputMessageService {
     log.info("input messages queried by session, sessionId={}, user={}, page={}, size={}, returned={}",
         sessionId, username, requestedPage, requestedSize, entitiesPage.getNumberOfElements());
     return ResultTool.success(entitiesPage.getContent().stream().map(this::toResponse)
+        .collect(Collectors.toList()));
+  }
+
+  private JsonResult<?> getStaleProcessingMessagesForUsername(String sessionId, Integer olderThanMinutes,
+      Integer limit, String username) {
+    int requestedOlderThanMinutes =
+        olderThanMinutes == null ? DEFAULT_STALE_PROCESSING_MINUTES : olderThanMinutes;
+    int requestedLimit = limit == null ? DEFAULT_STALE_PROCESSING_LIMIT : limit;
+    if (requestedOlderThanMinutes < 1 || requestedLimit < 1 || requestedLimit > MAX_STALE_PROCESSING_LIMIT) {
+      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
+    }
+
+    long threshold = System.currentTimeMillis() - requestedOlderThanMinutes * 60_000L;
+    PageRequest pageRequest = PageRequest.of(0, requestedLimit);
+    Page<InputMessageEntity> staleEntitiesPage;
+    if (sessionId == null || sessionId.isBlank()) {
+      staleEntitiesPage = inputMessageRepository.findAllByCreatedByAndStatusAndProcessingStartedAtLessThanEqual(
+          username, STATUS_PROCESSING, threshold, pageRequest);
+    } else {
+      staleEntitiesPage =
+          inputMessageRepository.findAllBySessionIdAndCreatedByAndStatusAndProcessingStartedAtLessThanEqual(
+              sessionId, username, STATUS_PROCESSING, threshold, pageRequest);
+    }
+    log.info(
+        "stale processing messages queried, sessionId={}, user={}, olderThanMinutes={}, limit={}, returned={}",
+        sessionId, username, requestedOlderThanMinutes, requestedLimit, staleEntitiesPage.getNumberOfElements());
+    return ResultTool.success(staleEntitiesPage.getContent().stream().map(this::toResponse)
         .collect(Collectors.toList()));
   }
 

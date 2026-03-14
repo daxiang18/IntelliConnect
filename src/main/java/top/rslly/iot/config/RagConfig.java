@@ -25,16 +25,21 @@ import dev.langchain4j.model.embedding.onnx.bgesmallzhv15q.BgeSmallZhV15Quantize
 import dev.langchain4j.model.openai.OpenAiEmbeddingModel;
 import dev.langchain4j.store.embedding.EmbeddingStore;
 import dev.langchain4j.store.embedding.chroma.ChromaEmbeddingStore;
+import dev.langchain4j.store.embedding.inmemory.InMemoryEmbeddingStore;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
+@Slf4j
 public class RagConfig {
   @Value("${rag.embedding_modelName}")
   private String embeddingModelName;
   @Value("${rag.knowledge_chat_embeddingStore_url}")
   private String knowledgeChatEmbeddingStoreUrl;
+  @Value("${rag.knowledge_chat_embeddingStore_in_memory:false}")
+  private boolean knowledgeChatEmbeddingStoreInMemory;
   @Value("${ai.siliconFlow-Key}")
   private String siliconFlowApiKey;
 
@@ -54,6 +59,11 @@ public class RagConfig {
 
   @Bean
   public EmbeddingStore<TextSegment> knowledgeChatEmbeddingStore() {
+    if (knowledgeChatEmbeddingStoreInMemory) {
+      log.info("Using in-memory knowledge chat embedding store");
+      return new InMemoryEmbeddingStore<>();
+    }
+    log.info("Using Chroma knowledge chat embedding store at {}", knowledgeChatEmbeddingStoreUrl);
     return ChromaEmbeddingStore.builder()
         .baseUrl(knowledgeChatEmbeddingStoreUrl)
         .collectionName("knowledge_chat")

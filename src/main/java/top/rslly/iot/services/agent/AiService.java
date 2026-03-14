@@ -38,5 +38,7 @@ public interface AiService {
 
   String getAiVisionIntent(String question, MultipartFile imageFile);
 
+  String getAiVisionIntent(String question, String imageUrl);
+
   void audioTmpGet(String name, HttpServletResponse response) throws IOException;
 }

@@ -18,8 +18,8 @@
 |-------------|------|------|
 | `text` | 文本消息 | 直接使用正文进行处理 |
 | `url` | 网页链接 | 处理阶段会抓取网页正文并生成结构化摘要 |
-| `image` | 图片消息 | 可作为标准化输入保存和归档 |
-| `voice` | 语音消息 | 可作为标准化输入保存和归档 |
+| `image` | 图片消息 | 处理阶段会尝试调用视觉模型提取图片中的文字和关键场景描述，并保留原始图片链接 |
+| `voice` | 语音消息 | 依赖上游转写文本进入知识库，附件中保留原始音频链接 |
 
 ## 整体处理流程
 
@@ -27,10 +27,11 @@
 2. 消息进入 `received` 状态
 3. 调用 `/api/v2/input/messages/{id}/process` 触发异步处理
 4. 若 `contentType=url`，系统先抓取网页并更新 `normalizedContent`
-5. 处理后的内容写入知识向量库
-6. 系统自动补充 `category` 与 `tags`
-7. 若 `syncTargets` 包含 `feishu`，则继续执行飞书同步
-8. 可通过去重键查询状态、进行语义召回，或提升为长期记忆
+5. 若 `contentType=image`，系统会尝试补充视觉摘要并更新 `normalizedContent`
+6. 处理后的内容写入知识向量库
+7. 系统自动补充 `category` 与 `tags`
+8. 若 `syncTargets` 包含 `feishu`，则继续执行飞书同步
+9. 可通过去重键查询状态、进行语义召回，或提升为长期记忆
 
 ## 核心字段
 
@@ -56,6 +57,8 @@
 | 字段 | 说明 |
 |------|------|
 | `status` | 消息处理状态 |
+| `processingStartedAt` | 当前处理批次开始时间；仅 `status=processing` 时非空，历史遗留记录会回退使用 `receivedAt` 做诊断 |
+| `processingDurationMs` | 当前处理批次已持续时间（毫秒）；仅 `status=processing` 时返回 |
 | `syncStatus` | 外部同步聚合状态 |
 | `syncedAt` | 最近一次成功同步时间 |
 | `externalReferencesJson` | 外部系统引用信息或失败原因 |
@@ -115,13 +118,44 @@ curl -X POST \
 | 场景 | 当前状态 | 说明 |
 |------|----------|------|
 | 仅飞书同步失败 | `status=ingested` 且 `syncStatus=failed` | 说明知识库入库已经完成，不应直接用重试接口重复 ingest |
-| 正在处理中但怀疑卡住 | `status=processing` | 当前模型没有单独的 `processingStartedAt` 字段，系统不会强制重试该状态，避免重复入库或重复外部同步 |
+| 正在处理中但怀疑卡住 | `status=processing` | 当前版本提供诊断接口暴露 `processingStartedAt`，但仍不会自动或强制重试该状态，避免重复入库或重复外部同步 |
 
 若消息长时间停留在 `processing`，建议先查看后端日志，确认失败原因或线程执行情况，再决定是否由运维手动干预该记录状态。
+
+## 卡住中的消息诊断
+
+### 查询疑似卡住的 `processing` 消息
+
+新增接口：
+
+```bash
+curl -H "Authorization: Bearer {token}" \
+  "http://localhost:8080/api/v2/input/messages/stale-processing?olderThanMinutes=30&limit=20"
+```
+
+可选参数：
+
+- `sessionId`：仅诊断指定会话
+- `olderThanMinutes`：只返回处理开始早于该阈值的消息，默认 `30`
+- `limit`：单次最多返回多少条，默认 `20`，最大 `100`
+
+返回结果只包含当前调用者名下、仍处于 `status=processing` 且处理起点早于阈值的消息。历史遗留记录若还没有 `processingStartedAt`，系统会回退使用 `receivedAt`。
+
+### 为什么只做诊断，不做自动恢复
+
+- 当前异步处理链路没有任务取消或处理租约（lease）机制
+- 若对疑似卡住消息自动改状态或自动重排队，原任务稍后仍可能完成，带来重复 ingest 或重复外部同步风险
+- 因此本次改动只增加显式可见性：让操作人员先定位和确认，再决定是否进行人工恢复
 
 ## 自动分类与标签
 
 处理阶段会根据 `contentType`、正文内容、域名、`#标签`、时间表达和关键词自动生成分类与标签。
+
+### 媒体内容的可搜索性补充
+
+- `image`：微信图片桥接现在会像文本/链接一样自动进入处理流程；若视觉模型可用，`normalizedContent` 会补充图片中的可见文字、主体对象和关键场景描述，并继续保留原始图片链接。
+- 若图片视觉提取失败，系统会回退到原有的 `normalizedContent`（通常是图片 URL），不会改变现有重试语义。
+- `voice`：当前仍以微信侧车提供的 `transcribedText` 作为可搜索正文，原始音频链接保存在附件中，后续可在此基础上继续增强。
 
 常见分类包括：
 

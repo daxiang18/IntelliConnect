@@ -157,6 +157,7 @@ IntelliConnect 平台使用 MySQL 作为主要的关系型数据库，存储用�
 | dedupe_key | VARCHAR (UNIQUE) | 去重键，保证消息幂等写入 |
 | status | VARCHAR | 处理状态：`received`、`processing`、`ingested`、`failed` |
 | received_at | BIGINT | 接收时间戳（毫秒） |
+| processing_started_at | BIGINT | 当前处理批次开始时间；仅 `status=processing` 时有值，历史记录可为空 |
 | created_by | VARCHAR | 创建该消息的系统用户名 |
 | sync_targets | VARCHAR | 目标同步列表，逗号分隔；当前推荐 `feishu` |
 | sync_status | VARCHAR | 聚合同步状态：`not_requested`、`pending`、`synced`、`failed` |

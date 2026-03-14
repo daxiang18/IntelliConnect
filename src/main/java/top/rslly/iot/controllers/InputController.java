@@ -73,6 +73,17 @@ public class InputController {
     return inputMessageService.getMessagesBySessionId(sessionId, page, size, header);
   }
 
+  @Operation(summary = "查询疑似卡住的处理中输入消息",
+      description = "仅返回当前调用者名下 status=processing 且 processingStartedAt 早于阈值的消息，帮助人工诊断")
+  @RequestMapping(value = "/messages/stale-processing", method = RequestMethod.GET)
+  public JsonResult<?> getStaleProcessingMessages(
+      @RequestParam(value = "sessionId", required = false) String sessionId,
+      @RequestParam(value = "olderThanMinutes", required = false) @Min(1) Integer olderThanMinutes,
+      @RequestParam(value = "limit", required = false) @Min(1) Integer limit,
+      @RequestHeader("Authorization") String header) {
+    return inputMessageService.getStaleProcessingMessages(sessionId, olderThanMinutes, limit, header);
+  }
+
   @Operation(summary = "触发标准化输入消息处理", description = "异步将输入消息写入知识向量库并更新处理状态")
   @RequestMapping(value = "/messages/{id}/process", method = RequestMethod.POST)
   public JsonResult<?> processMessage(@PathVariable("id") @Min(1) long id,

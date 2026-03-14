@@ -1800,6 +1800,58 @@ GET /input/messages/by-session?sessionId={sessionId}
 Authorization: Bearer {token}
 ```
 
+### 查询疑似卡住的处理中消息
+
+```
+GET /input/messages/stale-processing?olderThanMinutes=30&limit=20
+```
+
+**请求头:**
+```
+Authorization: Bearer {token}
+```
+
+**可选参数:**
+
+- `sessionId`: 仅检查某个会话
+- `olderThanMinutes`: 只返回处理起点早于该阈值的消息，默认 `30`
+- `limit`: 返回条数上限，默认 `20`，最大 `100`
+
+**用途:**
+
+- 给操作人员快速定位长时间停留在 `status=processing` 的消息
+- 与 `/input/messages/by-dedupe`、`/input/messages/by-session` 搭配，用于判断是否需要人工介入
+- 不会自动改状态，也不会自动重试
+
+**响应字段补充:**
+
+- `processingStartedAt`: 当前处理批次开始时间；非 `processing` 状态通常为 `null`。历史遗留记录若该字段为空，会回退为 `receivedAt`
+- `processingDurationMs`: 当前处理批次已持续时间（毫秒）；仅 `processing` 状态返回
+
+**响应示例:**
+```json
+{
+  "success": true,
+  "errorCode": 200,
+  "errorMsg": "成功",
+  "data": [
+    {
+      "id": 1001,
+      "sessionId": "wechat:gh_xxx:user-open-id",
+      "dedupeKey": "wechat:gh_xxx:user-open-id:msg-1001",
+      "status": "processing",
+      "receivedAt": 1716000000000,
+      "processingStartedAt": 1716000060000,
+      "processingDurationMs": 1860000,
+      "syncTargets": [
+        "feishu"
+      ],
+      "syncStatus": "pending"
+    }
+  ]
+}
+```
+
 ### 触发输入消息处理
 
 ```
@@ -1840,7 +1892,7 @@ Authorization: Bearer {token}
 **说明:**
 
 - 若消息只是 `syncStatus=failed` 但 `status=ingested`，不要使用该接口，以免重复入库
-- 当前不会对 `status=processing` 的消息执行强制重试，避免重复写入知识库或重复外部同步
+- 当前不会对 `status=processing` 的消息执行强制重试，避免重复写入知识库或重复外部同步；请先使用 `/input/messages/stale-processing` 做诊断
 
 ### 语义召回输入消息
 

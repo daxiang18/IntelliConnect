@@ -234,7 +234,20 @@ curl -v https://your-domain.com/api/v2/wechat/callback
 **说明**:
 - 重试接口仅接受 `status=failed`
 - 若当前是 `status=ingested` 且 `syncStatus=failed`，说明知识库写入已经成功，不要使用重试接口重复 ingest
-- 若消息长时间停留在 `processing`，当前版本不会自动清理或强制重试，因为模型中没有单独的处理开始时间字段，需先人工确认是否真的卡住
+- 若消息长时间停留在 `processing`，请先调用 `GET /api/v2/input/messages/stale-processing?olderThanMinutes=30` 查看是否已超过阈值，再结合日志判断是否真的卡住
+
+#### 问题: 输入消息长时间停留在 processing
+**症状**: 消息持续显示 `status=processing`，迟迟没有进入 `ingested` 或 `failed`。
+
+**排查步骤**:
+1. 先调用 `GET /api/v2/input/messages/stale-processing?olderThanMinutes=30&limit=20`
+2. 查看返回中的 `processingStartedAt` 与 `processingDurationMs`（历史遗留记录若没有 `processingStartedAt`，接口会回退显示 `receivedAt`）
+3. 根据 `messageId`、`dedupeKey` 检查后端日志，确认线程是否仍在执行、是否存在向量库/URL 抓取/外部同步阻塞
+4. 若已确认原任务不会继续推进，再由运维人工干预数据状态；只有进入 `failed` 后才可调用 `/retry`
+
+**说明**:
+- 新接口只提供诊断可见性，不会自动改写消息状态
+- 这是刻意的低风险设计：当前异步链路没有安全的取消机制，自动改状态或自动重排队可能导致重复 ingest 或重复外部同步
 
 #### 问题: 输入闭环或测试启动时报 JsonParseException，提示遇到字符 `<`
 **症状**: 日志中出现 `Unexpected character ('<' ...)`，通常发生在知识库/向量库初始化或写入阶段。
@@ -243,9 +256,13 @@ curl -v https://your-domain.com/api/v2/wechat/callback
 1. 检查 `rag.knowledge_chat_embeddingStore_url` 是否指向真实 Chroma API，而不是 HTML 页面
 2. 访问对应地址，确认返回 JSON 而非登录页、网关错误页或 404 HTML
 3. 检查 smoke 环境中的 `SMOKE_CHROMA_URL` 是否与容器映射端口一致
+4. 如果只是跑 smoke / Spring Boot 测试，请先确认是否保持了 `rag.knowledge_chat_embeddingStore_in_memory=true`（smoke 与 test 默认如此），避免把外部 Chroma 启动时序问题误判为业务故障
 
 **解决方案**:
 ```bash
+# smoke 默认走内存向量库；只有在你明确要验证 Chroma 集成时才关闭它
+echo "${SMOKE_RAG_USE_IN_MEMORY_STORE:-true}"
+
 # 检查 smoke 环境中的 Chroma 地址
 echo "$SMOKE_CHROMA_URL"
 

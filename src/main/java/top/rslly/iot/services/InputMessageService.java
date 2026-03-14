@@ -33,6 +33,9 @@ public interface InputMessageService {
 
   JsonResult<?> getMessagesBySessionId(String sessionId, Integer page, Integer size, String token);
 
+  JsonResult<?> getStaleProcessingMessages(String sessionId, Integer olderThanMinutes, Integer limit,
+      String token);
+
   JsonResult<?> processMessage(long id, String token);
 
   JsonResult<?> retryMessage(long id, String token);

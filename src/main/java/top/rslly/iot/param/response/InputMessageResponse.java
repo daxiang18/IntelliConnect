@@ -37,6 +37,8 @@ public class InputMessageResponse {
   private String dedupeKey;
   private String status;
   private long receivedAt;
+  private Long processingStartedAt;
+  private Long processingDurationMs;
   private List<String> syncTargets;
   private String syncStatus;
   private Long syncedAt;

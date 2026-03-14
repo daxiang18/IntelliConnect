@@ -21,6 +21,9 @@ storage:
   database: mysql
 
 rag:
+  # Default smoke runs to an in-memory vector store to avoid environment-specific Chroma startup races.
+  # Set SMOKE_RAG_USE_IN_MEMORY_STORE=false when you want smoke to exercise a real Chroma instance.
+  knowledge_chat_embeddingStore_in_memory: ${SMOKE_RAG_USE_IN_MEMORY_STORE:true}
   knowledge_chat_embeddingStore_url: ${SMOKE_CHROMA_URL:http://127.0.0.1:18000}
 
 wx:

@@ -47,6 +47,8 @@ import jakarta.servlet.ServletOutputStream;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.File;
 import java.io.IOException;
+import java.net.URL;
+import java.net.URLConnection;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
@@ -167,49 +169,104 @@ public class AiServiceImpl implements AiService {
 
   @Override
   public String getAiVisionIntent(String question, MultipartFile imageFile) {
-    Map<String, Object> result = new HashMap<>();
     try {
-      // 获取图片字节内容
-      byte[] imageData = imageFile.getBytes();
-      // 获取文件 MIME 类型
-      String contentType = imageFile.getContentType(); // 可能是 image/jpeg, image/jpg, image/png 等
-      if (contentType == null || !contentType.startsWith("image/")) {
-        result.put("success", false);
-        result.put("message", "请上传图片文件");
-        return new ObjectMapper().writeValueAsString(result);
+      return getAiVisionIntent(question, imageFile.getOriginalFilename(), imageFile.getContentType(),
+          imageFile.getBytes());
+    } catch (Exception ignored) {
+      return "无可以使用的视觉模型";
+    }
+  }
+
+  @Override
+  public String getAiVisionIntent(String question, String imageUrl) {
+    if (imageUrl == null || imageUrl.isBlank()) {
+      return buildVisionResponse(false, null, "图片地址不能为空");
+    }
+    try {
+      URLConnection connection = new URL(imageUrl).openConnection();
+      connection.setConnectTimeout(5000);
+      connection.setReadTimeout(10000);
+      long contentLength = connection.getContentLengthLong();
+      if (contentLength > 4 * 1024 * 1024) {
+        return buildVisionResponse(false, null, "图片大小超过限制");
+      }
+      try (var inputStream = connection.getInputStream()) {
+        return getAiVisionIntent(question, imageUrl, connection.getContentType(), inputStream.readAllBytes());
+      }
+    } catch (Exception e) {
+      log.warn("图片下载失败, url={}, error={}", imageUrl, e.getMessage());
+      return buildVisionResponse(false, null, "图片下载失败");
+    }
+  }
+
+  private String getAiVisionIntent(String question, String imageSource, String contentType, byte[] imageData) {
+    try {
+      String normalizedContentType = normalizeImageContentType(contentType, imageSource);
+      if (normalizedContentType == null || !normalizedContentType.startsWith("image/")) {
+        return buildVisionResponse(false, null, "请上传图片文件");
       }
 
-      // 统一 MIME 类型（image/jpg -> image/jpeg）
-      if ("image/jpg".equalsIgnoreCase(contentType)) {
-        contentType = "image/jpeg";
-      }
-
-      // 支持的图片类型列表
       List<String> supportedTypes = Arrays.asList("image/jpeg", "image/png", "image/webp");
-      if (!supportedTypes.contains(contentType)) {
-        result.put("success", false);
-        result.put("message", "不支持的图片格式");
-        return new ObjectMapper().writeValueAsString(result);
+      if (!supportedTypes.contains(normalizedContentType)) {
+        return buildVisionResponse(false, null, "不支持的图片格式");
       }
 
-      // 图片大小限制（如超过 4MB）
       long maxSizeBytes = 4 * 1024 * 1024;
-      if (imageFile.getSize() > maxSizeBytes) {
-        result.put("success", false);
-        result.put("message", "图片大小超过限制");
-        return new ObjectMapper().writeValueAsString(result);
+      if (imageData == null || imageData.length == 0) {
+        return buildVisionResponse(false, null, "图片内容为空");
+      }
+      if (imageData.length > maxSizeBytes) {
+        return buildVisionResponse(false, null, "图片大小超过限制");
       }
 
-      // 转为 base64 并拼接为 data URL
       String imageBase64 = Base64.getEncoder().encodeToString(imageData);
-      String dataUrl = "data:" + contentType + ";base64," + imageBase64;
-
-      // 调用 LLM 视觉模型接口
+      String dataUrl = "data:" + normalizedContentType + ";base64," + imageBase64;
       String answer = LLMFactory.getLLM(visionModel).imageToWord(question, dataUrl);
+      return buildVisionResponse(true, answer, null);
+    } catch (Exception ignored) {
+      return "无可以使用的视觉模型";
+    }
+  }
 
-      // 返回结果
-      result.put("success", true);
-      result.put("text", answer);
+  private String normalizeImageContentType(String contentType, String imageSource) {
+    String normalizedContentType = contentType;
+    if (normalizedContentType != null) {
+      normalizedContentType = normalizedContentType.split(";", 2)[0].trim().toLowerCase(Locale.ROOT);
+      if ("image/jpg".equalsIgnoreCase(normalizedContentType)) {
+        normalizedContentType = "image/jpeg";
+      }
+    }
+    if ((normalizedContentType == null || normalizedContentType.isBlank()
+        || "application/octet-stream".equals(normalizedContentType))
+        && imageSource != null && !imageSource.isBlank()) {
+      String lowerSource = imageSource.toLowerCase(Locale.ROOT);
+      int queryIndex = lowerSource.indexOf('?');
+      if (queryIndex >= 0) {
+        lowerSource = lowerSource.substring(0, queryIndex);
+      }
+      if (lowerSource.endsWith(".jpg") || lowerSource.endsWith(".jpeg")) {
+        return "image/jpeg";
+      }
+      if (lowerSource.endsWith(".png")) {
+        return "image/png";
+      }
+      if (lowerSource.endsWith(".webp")) {
+        return "image/webp";
+      }
+    }
+    return normalizedContentType;
+  }
+
+  private String buildVisionResponse(boolean success, String text, String message) {
+    Map<String, Object> result = new HashMap<>();
+    result.put("success", success);
+    if (text != null) {
+      result.put("text", text);
+    }
+    if (message != null) {
+      result.put("message", message);
+    }
+    try {
       return new ObjectMapper().writeValueAsString(result);
     } catch (Exception ignored) {
       return "无可以使用的视觉模型";

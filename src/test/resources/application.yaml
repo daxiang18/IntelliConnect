@@ -1,0 +1,3 @@
+rag:
+  # Keep Spring Boot tests off external Chroma unless a specific test overrides it.
+  knowledge_chat_embeddingStore_in_memory: true

@@ -42,6 +42,7 @@ public class InputMessageEntity {
   private String syncStatus;
   private Long syncedAt;
   private String externalReferencesJson;
+  private Long processingStartedAt;
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -214,6 +215,16 @@ public class InputMessageEntity {
     this.externalReferencesJson = externalReferencesJson;
   }
 
+  @Basic
+  @Column(name = "processing_started_at")
+  public Long getProcessingStartedAt() {
+    return processingStartedAt;
+  }
+
+  public void setProcessingStartedAt(Long processingStartedAt) {
+    this.processingStartedAt = processingStartedAt;
+  }
+
   @Override
   public boolean equals(Object o) {
     if (this == o)
@@ -232,13 +243,14 @@ public class InputMessageEntity {
         && Objects.equals(syncTargets, that.syncTargets)
         && Objects.equals(syncStatus, that.syncStatus)
         && Objects.equals(syncedAt, that.syncedAt)
-        && Objects.equals(externalReferencesJson, that.externalReferencesJson);
+        && Objects.equals(externalReferencesJson, that.externalReferencesJson)
+        && Objects.equals(processingStartedAt, that.processingStartedAt);
   }
 
   @Override
   public int hashCode() {
     return Objects.hash(id, sourceType, sourceAccountId, sessionId, senderId, contentType, rawContent,
         normalizedContent, attachmentsJson, dedupeKey, status, receivedAt, createdBy, syncTargets,
-        syncStatus, syncedAt, externalReferencesJson);
+        syncStatus, syncedAt, externalReferencesJson, processingStartedAt);
   }
 }

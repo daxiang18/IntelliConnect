@@ -22,6 +22,8 @@ package top.rslly.iot.dao;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import top.rslly.iot.models.InputMessageEntity;
 
 import java.util.List;
@@ -38,4 +40,27 @@ public interface InputMessageRepository extends JpaRepository<InputMessageEntity
       String createdBy);
 
   Page<InputMessageEntity> findAllBySessionIdAndCreatedBy(String sessionId, String createdBy, Pageable pageable);
+
+  @Query("""
+      select entity from InputMessageEntity entity
+      where entity.createdBy = :createdBy
+        and entity.status = :status
+        and coalesce(entity.processingStartedAt, entity.receivedAt) <= :threshold
+      order by coalesce(entity.processingStartedAt, entity.receivedAt) asc
+      """)
+  Page<InputMessageEntity> findAllByCreatedByAndStatusAndProcessingStartedAtLessThanEqual(
+      @Param("createdBy") String createdBy, @Param("status") String status, @Param("threshold") Long threshold,
+      Pageable pageable);
+
+  @Query("""
+      select entity from InputMessageEntity entity
+      where entity.sessionId = :sessionId
+        and entity.createdBy = :createdBy
+        and entity.status = :status
+        and coalesce(entity.processingStartedAt, entity.receivedAt) <= :threshold
+      order by coalesce(entity.processingStartedAt, entity.receivedAt) asc
+      """)
+  Page<InputMessageEntity> findAllBySessionIdAndCreatedByAndStatusAndProcessingStartedAtLessThanEqual(
+      @Param("sessionId") String sessionId, @Param("createdBy") String createdBy, @Param("status") String status,
+      @Param("threshold") Long threshold, Pageable pageable);
 }

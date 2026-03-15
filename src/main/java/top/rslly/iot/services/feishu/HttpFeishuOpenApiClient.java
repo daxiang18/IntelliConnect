@@ -156,16 +156,16 @@ public class HttpFeishuOpenApiClient implements FeishuOpenApiClient {
 
         JSONObject child = new JSONObject();
         child.put("block_type", 2);
-        child.put("paragraph", paragraphNode);
+        child.put("text", paragraphNode);
         children.add(child);
       }
 
       JSONObject payload = new JSONObject();
       payload.put("children", children);
       payload.put("document_revision_id", -1);
-      // Use blocks/root/children to append to document root
+      // Use blocks/{documentId}/children to append to document root
       postForData(String.format(Locale.ROOT,
-          "docx/v1/documents/%s/blocks/root/children", documentId),
+          "docx/v1/documents/%s/blocks/%s/children", documentId, documentId),
           tenantAccessToken, payload, "append document content");
     }
   }

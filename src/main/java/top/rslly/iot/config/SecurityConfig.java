@@ -84,6 +84,7 @@ public class SecurityConfig {
         "/api/v2/ai/tmp_voice/**",
         "/wxLogin",
         "/wxRegister",
+        "/wxScanLogin/**",
         "/api/v2/otaPassiveEnable",
         "/xiaozhi/ota/**",
         "/xiaozhi/ota/activate/**",
@@ -110,7 +111,7 @@ public class SecurityConfig {
             .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-resources/**",
                 "/webjars/**")
             .permitAll()
-            .requestMatchers("/wxLogin", "/wxmsg/**", "/wxRegister").permitAll()
+            .requestMatchers("/wxLogin", "/wxmsg/**", "/wxRegister", "/wxScanLogin/**").permitAll()
             .anyRequest().authenticated())
         // 添加JWT登录拦截器
         .addFilter(new JWTAuthenticationFilter(authenticationManager()))

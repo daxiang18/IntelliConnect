@@ -17,32 +17,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package top.rslly.iot.services.wechat;
+package top.rslly.iot.param.response;
 
-import top.rslly.iot.models.WxUserEntity;
-import top.rslly.iot.param.request.WxUser;
-import top.rslly.iot.utility.result.JsonResult;
+import lombok.Data;
 
-import java.io.IOException;
-import java.util.List;
-
-public interface WxUserService {
-  JsonResult<?> wxLogin(WxUser wxUser) throws IOException;
-
-  WxUserEntity wxRegister(String appid, String openid);
-
-  List<WxUserEntity> findAllByAppidAndOpenid(String appid, String openid);
-
-  List<WxUserEntity> findAllByName(String name);
-
-  JsonResult<?> wxGetAllUser();
-
-  /** 生成扫码登录二维码 */
-  JsonResult<?> generateScanLoginQrCode() throws IOException;
-
-  /** 检查扫码登录状态 */
-  JsonResult<?> checkScanLoginStatus(String sceneId);
-
-  /** 处理扫码事件（由 DealMsg 调用） */
-  void handleScanEvent(String openid, String sceneStr);
+@Data
+public class WxScanLoginResponse {
+  /** 二维码图片 URL */
+  private String qrCodeUrl;
+  /** 场景 ID，前端用于轮询 */
+  private String sceneId;
+  /** 二维码过期时间（秒） */
+  private Integer expireSeconds;
 }

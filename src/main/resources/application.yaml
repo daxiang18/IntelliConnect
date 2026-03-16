@@ -103,11 +103,13 @@ wx:
   register:
     trigger-keyword: 注册账户   # 触发注册的关键字
     success-message: 注册成功   # 注册成功后的回复信息
-  appid: XXXXXX
-  appsecret: XXXXXX
+  appid: wxbc16ae41e3cd625b
+  appsecret: 391e8381c9712cc203f5f4469aa9f04a
   templateUrl: XXXXX
-  alarmTemplateId: XXXXXX
+  alarmTemplateId: lSVm034pPL1gqJ_8WPcGkZrn9G93xNaTcxH026JoZeQ
   base-url: https://api.weixin.qq.com
+  scan-login:
+    expire-seconds: 300  # 扫码登录二维码过期时间（秒），默认5分钟
   micro:
     appid: XXXXXX
     appsecret: XXXXXX
@@ -116,7 +118,7 @@ wx:
     ToUserName2: XXXXXX
     appsecret2: XXXXXX
   msg:
-    token: XXXXXX
+    token: daxiangwawa666888
 storage:
   database: influxdb
 js:

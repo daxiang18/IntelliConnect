@@ -106,6 +106,65 @@ public class DealWx {
     // System.out.println(response.body());
   }
 
+  /**
+   * 获取公众号 access_token（带 Redis 缓存，有效期 7000 秒）
+   */
+  public String getCachedAccessToken(String appid, String appSecret) throws IOException {
+    String cacheKey = "wx_access_token:" + appid;
+    String token = (String) redisUtil.get(cacheKey);
+    if (token != null && !token.isEmpty()) {
+      return token;
+    }
+    String result = getAccessToken(appid, appSecret);
+    JSONObject json = JSONObject.parseObject(result);
+    token = json.getString("access_token");
+    if (token != null && !token.isEmpty()) {
+      // 微信 access_token 有效期 7200 秒，缓存 7000 秒留一些余量
+      redisUtil.set(cacheKey, token, 7000);
+    } else {
+      log.error("获取公众号 access_token 失败: {}", result);
+    }
+    return token;
+  }
 
+  /**
+   * 创建带参数的临时二维码（用于扫码登录）
+   *
+   * @param accessToken 公众号 access_token
+   * @param sceneStr 场景值字符串（如 UUID）
+   * @param expireSeconds 二维码过期秒数（最大 2592000 即 30 天）
+   * @return 包含 ticket、expire_seconds、url 的 JSON 字符串
+   */
+  public String createTempQrCode(String accessToken, String sceneStr, int expireSeconds)
+      throws IOException {
+    String url = baseUrl + "/cgi-bin/qrcode/create?access_token=" + accessToken;
+    JSONObject body = new JSONObject();
+    body.put("expire_seconds", expireSeconds);
+    body.put("action_name", "QR_STR_SCENE");
+    JSONObject actionInfo = new JSONObject();
+    JSONObject scene = new JSONObject();
+    scene.put("scene_str", sceneStr);
+    actionInfo.put("scene", scene);
+    body.put("action_info", actionInfo);
+    String result = httpRequestUtils.createHttpsPostByjson(url, body.toJSONString());
+    log.info("创建临时二维码结果: {}", result);
+    return result;
+  }
+
+  /**
+   * 通过 ticket 换取二维码图片 URL
+   *
+   * @param ticket 二维码 ticket（需要 URL encode）
+   * @return 二维码图片 URL
+   */
+  public String getQrCodeUrl(String ticket) {
+    try {
+      String encodedTicket = java.net.URLEncoder.encode(ticket, "UTF-8");
+      return "https://mp.weixin.qq.com/cgi-bin/showqrcode?ticket=" + encodedTicket;
+    } catch (Exception e) {
+      log.error("编码 ticket 失败", e);
+      return null;
+    }
+  }
 
 }

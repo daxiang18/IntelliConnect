@@ -172,6 +172,23 @@ public class DealMsg {
                   dealWx.sendContent(openid, "创万联AI小助手正在为你服务", microappid);
                 else if (microId.equals(ToUserName2))
                   dealWx.sendContent(openid, "创万联AI小助手正在为你服务", microappid2);
+              } else if ("subscribe".equals(event)) {
+                // 用户关注事件，检查是否带有扫码场景值
+                String eventKey = JSON.parseObject(bodyInfo).getString("EventKey");
+                if (eventKey != null && eventKey.startsWith("qrscene_")) {
+                  String sceneStr = eventKey.substring("qrscene_".length());
+                  log.info("新用户扫码关注，openid={}, sceneStr={}", openid, sceneStr);
+                  wxUserService.handleScanEvent(openid, sceneStr);
+                  dealWx.sendContent(openid, "欢迎关注！扫码登录成功，请返回网页继续操作。", microappid);
+                }
+              } else if ("SCAN".equals(event)) {
+                // 已关注用户扫码事件
+                String eventKey = JSON.parseObject(bodyInfo).getString("EventKey");
+                if (eventKey != null && !eventKey.isEmpty()) {
+                  log.info("已关注用户扫码，openid={}, eventKey={}", openid, eventKey);
+                  wxUserService.handleScanEvent(openid, eventKey);
+                  dealWx.sendContent(openid, "扫码登录成功，请返回网页继续操作。", microappid);
+                }
               }
             }
           }
@@ -243,6 +260,36 @@ public class DealMsg {
                   ("[位置] 纬度:" + latitude + " 经度:" + longitude + (label.isBlank() ? "" : " 标注:" + label))
                       .trim();
               smartRobot.smartSendContent(openid, normalizedContent, appid, msgId);
+            } else if (type.getText().equals("event")) {
+              // XML 格式的事件推送（公众号场景）
+              Element eventElem = root.element("Event");
+              if (eventElem != null) {
+                String eventType = eventElem.getText();
+                if ("subscribe".equals(eventType)) {
+                  // 新用户关注事件，检查是否有二维码场景值
+                  Element eventKeyElem = root.element("EventKey");
+                  if (eventKeyElem != null) {
+                    String eventKey = eventKeyElem.getText();
+                    if (eventKey != null && eventKey.startsWith("qrscene_")) {
+                      String sceneStr = eventKey.substring("qrscene_".length());
+                      log.info("XML: 新用户扫码关注，openid={}, sceneStr={}", openid, sceneStr);
+                      wxUserService.handleScanEvent(openid, sceneStr);
+                      dealWx.sendContent(openid, "欢迎关注！扫码登录成功，请返回网页继续操作。", appid);
+                    }
+                  }
+                } else if ("SCAN".equals(eventType)) {
+                  // 已关注用户扫码事件
+                  Element eventKeyElem = root.element("EventKey");
+                  if (eventKeyElem != null) {
+                    String eventKey = eventKeyElem.getText();
+                    if (eventKey != null && !eventKey.isEmpty()) {
+                      log.info("XML: 已关注用户扫码，openid={}, eventKey={}", openid, eventKey);
+                      wxUserService.handleScanEvent(openid, eventKey);
+                      dealWx.sendContent(openid, "扫码登录成功，请返回网页继续操作。", appid);
+                    }
+                  }
+                }
+              }
             }
             // e.printStackTrace();
           } catch (Exception e2) {

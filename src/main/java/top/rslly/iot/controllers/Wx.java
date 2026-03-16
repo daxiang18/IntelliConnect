@@ -101,4 +101,29 @@ public class Wx {
   public void WxMsg(HttpServletRequest request, HttpServletResponse response) {
     dealMsg.WxMsg(request, response);
   }
+
+  // ==================== 微信公众号扫码登录 ====================
+
+  /**
+   * 生成扫码登录二维码
+   * <p>
+   * 前端调用此接口获取带参二维码 URL 和 sceneId，然后展示二维码给用户扫描，
+   * 同时使用 sceneId 轮询 /wxScanLogin/check 接口检查登录状态。
+   */
+  @RequestMapping(value = "/wxScanLogin/qrcode", method = RequestMethod.GET)
+  public JsonResult<?> wxScanLoginQrCode() throws IOException {
+    return wxUserService.generateScanLoginQrCode();
+  }
+
+  /**
+   * 检查扫码登录状态（前端轮询）
+   * <p>
+   * 返回状态：waiting-等待扫码, scanned-已扫码（同时返回 token）, expired-已过期
+   *
+   * @param sceneId 二维码场景 ID
+   */
+  @RequestMapping(value = "/wxScanLogin/check", method = RequestMethod.GET)
+  public JsonResult<?> wxScanLoginCheck(@RequestParam("sceneId") String sceneId) {
+    return wxUserService.checkScanLoginStatus(sceneId);
+  }
 }

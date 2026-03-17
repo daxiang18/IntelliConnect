@@ -76,8 +76,10 @@ const product = {
 }
 const hubCore = {
   hubCorePage: 'Personal Hub',
+  hubDashboard: 'Dashboard',
   inbox: 'Inbox',
   quickNote: 'Quick Note',
+  archive: 'Archive',
 }
 const permission = {
   permission: 'SystemSetting',

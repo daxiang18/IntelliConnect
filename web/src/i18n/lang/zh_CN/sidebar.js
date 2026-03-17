@@ -83,8 +83,10 @@ const product = {
 }
 const hubCore = {
   hubCorePage: '个人中枢',
+  hubDashboard: '中枢概览',
   inbox: '消息收件箱',
   quickNote: '快速速记',
+  archive: '知识归档',
 }
 const deviceData = {
   deviceDataPage: '设备数据',

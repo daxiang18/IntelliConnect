@@ -119,15 +119,23 @@ public class InputController {
     return inputMessageService.promoteMessageToLongMemory(id, inputMessagePromoteParam, header);
   }
 
-  @Operation(summary = "收件箱消息列表", description = "分页查询当前用户所有输入消息，支持按来源类型、状态、内容类型筛选")
+  @Operation(summary = "收件箱消息列表", description = "分页查询当前用户所有输入消息，支持按来源类型、状态、内容类型、关键词筛选")
   @RequestMapping(value = "/messages", method = RequestMethod.GET)
   public JsonResult<?> listMessages(
       @RequestParam(value = "sourceType", required = false) String sourceType,
       @RequestParam(value = "status", required = false) String status,
       @RequestParam(value = "contentType", required = false) String contentType,
+      @RequestParam(value = "keyword", required = false) String keyword,
+      @RequestParam(value = "archived", required = false) Boolean archived,
       @RequestParam(value = "page", required = false) Integer page,
       @RequestParam(value = "size", required = false) Integer size,
       @RequestHeader("Authorization") String header) {
-    return inputMessageService.listMessages(sourceType, status, contentType, page, size, header);
+    return inputMessageService.listMessages(sourceType, status, contentType, keyword, archived, page, size, header);
+  }
+
+  @Operation(summary = "消息统计", description = "按状态和来源类型分组统计当前用户消息数量")
+  @RequestMapping(value = "/messages/stats", method = RequestMethod.GET)
+  public JsonResult<?> getMessageStats(@RequestHeader("Authorization") String header) {
+    return inputMessageService.getMessageStats(header);
   }
 }

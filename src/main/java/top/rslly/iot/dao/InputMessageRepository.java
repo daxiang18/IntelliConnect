@@ -78,4 +78,40 @@ public interface InputMessageRepository extends JpaRepository<InputMessageEntity
   Page<InputMessageEntity> findAllBySessionIdAndCreatedByAndStatusAndProcessingStartedAtLessThanEqual(
       @Param("sessionId") String sessionId, @Param("createdBy") String createdBy, @Param("status") String status,
       @Param("threshold") Long threshold, Pageable pageable);
+
+  /** 通用多条件组合查询（支持关键词搜索） */
+  @Query("""
+      select e from InputMessageEntity e
+      where e.createdBy = :createdBy
+        and (:sourceType is null or e.sourceType = :sourceType)
+        and (:status is null or e.status = :status)
+        and (:contentType is null or e.contentType = :contentType)
+        and (:keyword is null or lower(coalesce(e.normalizedContent, e.rawContent, '')) like lower(concat('%', :keyword, '%')))
+        and (:archivedOnly = false or e.status in ('parsed', 'archived', 'synced'))
+      order by e.receivedAt desc
+      """)
+  Page<InputMessageEntity> searchMessages(
+      @Param("createdBy") String createdBy,
+      @Param("sourceType") String sourceType,
+      @Param("status") String status,
+      @Param("contentType") String contentType,
+      @Param("keyword") String keyword,
+      @Param("archivedOnly") boolean archivedOnly,
+      Pageable pageable);
+
+  /** 按创建者统计各状态消息数量 */
+  @Query("""
+      select e.status, count(e) from InputMessageEntity e
+      where e.createdBy = :createdBy
+      group by e.status
+      """)
+  List<Object[]> countByStatusGrouped(@Param("createdBy") String createdBy);
+
+  /** 按创建者统计各来源类型消息数量 */
+  @Query("""
+      select e.sourceType, count(e) from InputMessageEntity e
+      where e.createdBy = :createdBy
+      group by e.sourceType
+      """)
+  List<Object[]> countBySourceTypeGrouped(@Param("createdBy") String createdBy);
 }

@@ -10,8 +10,18 @@ export default [
       icon: 'InboxOutlined',
       domain: 'hub',
     },
-    redirect: { path: '/inbox' },
+    redirect: { path: '/hubDashboard' },
     children: [
+      {
+        path: '/hubDashboard',
+        name: 'hubDashboard',
+        component: () => import('@/views/hubDashboard/index.vue'),
+        meta: {
+          title: 'hubDashboard',
+          auth: ['[ROLE_admin]', '[ROLE_guest]', '[ROLE_wx_user]'],
+          domain: 'hub',
+        },
+      },
       {
         path: '/inbox',
         name: 'inbox',
@@ -28,6 +38,16 @@ export default [
         component: () => import('@/views/quickNote/index.vue'),
         meta: {
           title: 'quickNote',
+          auth: ['[ROLE_admin]', '[ROLE_guest]', '[ROLE_wx_user]'],
+          domain: 'hub',
+        },
+      },
+      {
+        path: '/archive',
+        name: 'archive',
+        component: () => import('@/views/archive/index.vue'),
+        meta: {
+          title: 'archive',
           auth: ['[ROLE_admin]', '[ROLE_guest]', '[ROLE_wx_user]'],
           domain: 'hub',
         },

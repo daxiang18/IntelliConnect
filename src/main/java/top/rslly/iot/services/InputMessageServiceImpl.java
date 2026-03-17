@@ -1077,7 +1077,7 @@ public class InputMessageServiceImpl implements InputMessageService {
 
   @Override
   public JsonResult<?> listMessages(String sourceType, String status, String contentType,
-      Integer page, Integer size, String token) {
+      String keyword, Boolean archived, Integer page, Integer size, String token) {
     String username;
     try {
       username = resolveUsername(token);
@@ -1090,18 +1090,15 @@ public class InputMessageServiceImpl implements InputMessageService {
     int pageSize = (size != null && size > 0 && size <= 100) ? size : 20;
     PageRequest pageable = PageRequest.of(pageNum, pageSize);
 
-    Page<InputMessageEntity> result;
-    if (sourceType != null && !sourceType.isBlank()) {
-      result = inputMessageRepository.findAllByCreatedByAndSourceTypeOrderByReceivedAtDesc(username, sourceType,
-          pageable);
-    } else if (status != null && !status.isBlank()) {
-      result = inputMessageRepository.findAllByCreatedByAndStatusOrderByReceivedAtDesc(username, status, pageable);
-    } else if (contentType != null && !contentType.isBlank()) {
-      result = inputMessageRepository.findAllByCreatedByAndContentTypeOrderByReceivedAtDesc(username, contentType,
-          pageable);
-    } else {
-      result = inputMessageRepository.findAllByCreatedByOrderByReceivedAtDesc(username, pageable);
-    }
+    // 标准化空字符串参数为 null
+    String srcType = (sourceType != null && !sourceType.isBlank()) ? sourceType : null;
+    String sts = (status != null && !status.isBlank()) ? status : null;
+    String cntType = (contentType != null && !contentType.isBlank()) ? contentType : null;
+    String kw = (keyword != null && !keyword.isBlank()) ? keyword : null;
+    boolean archivedOnly = Boolean.TRUE.equals(archived);
+
+    Page<InputMessageEntity> result = inputMessageRepository.searchMessages(
+        username, srcType, sts, cntType, kw, archivedOnly, pageable);
 
     JSONObject data = new JSONObject();
     data.put("content", result.getContent());
@@ -1109,6 +1106,44 @@ public class InputMessageServiceImpl implements InputMessageService {
     data.put("totalPages", result.getTotalPages());
     data.put("page", result.getNumber());
     data.put("size", result.getSize());
+    return ResultTool.success(data);
+  }
+
+  @Override
+  public JsonResult<?> getMessageStats(String token) {
+    String username;
+    try {
+      username = resolveUsername(token);
+    } catch (Exception e) {
+      log.warn("get message stats failed to parse token", e);
+      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
+    }
+
+    JSONObject data = new JSONObject();
+
+    // 按状态分组
+    List<Object[]> statusCounts = inputMessageRepository.countByStatusGrouped(username);
+    JSONObject byStatus = new JSONObject();
+    long totalCount = 0;
+    for (Object[] row : statusCounts) {
+      String statusKey = (String) row[0];
+      Long count = (Long) row[1];
+      byStatus.put(statusKey != null ? statusKey : "unknown", count);
+      totalCount += count;
+    }
+    data.put("byStatus", byStatus);
+
+    // 按来源类型分组
+    List<Object[]> sourceCounts = inputMessageRepository.countBySourceTypeGrouped(username);
+    JSONObject bySource = new JSONObject();
+    for (Object[] row : sourceCounts) {
+      String srcKey = (String) row[0];
+      Long count = (Long) row[1];
+      bySource.put(srcKey != null ? srcKey : "unknown", count);
+    }
+    data.put("bySource", bySource);
+
+    data.put("total", totalCount);
     return ResultTool.success(data);
   }
 }

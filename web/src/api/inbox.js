@@ -29,3 +29,18 @@ export const retryMessage = (id) =>
     url: `/api/v2/input/messages/${id}/retry`,
     method: 'post',
   })
+
+/** 查询归档消息列表（支持关键词搜索） */
+export const getArchivedMessages = (params) =>
+  request({
+    url: '/api/v2/input/messages',
+    method: 'get',
+    params,
+  })
+
+/** 获取消息统计数据 */
+export const getMessageStats = () =>
+  request({
+    url: '/api/v2/input/messages/stats',
+    method: 'get',
+  })

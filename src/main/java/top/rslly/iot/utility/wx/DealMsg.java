@@ -176,6 +176,45 @@ public class DealMsg {
               else if (microId.equals(ToUserName2))
                 smartRobot.smartImageSendContent(openid, imageUrl, microappid2, msgId);
             }
+            case "voice" -> {
+              String openid = JSON.parseObject(bodyInfo).getString("FromUserName");
+              String mediaId = JSON.parseObject(bodyInfo).getString("MediaId");
+              String msgId = JSON.parseObject(bodyInfo).getString("MsgId");
+              if (msgId == null || msgId.isEmpty())
+                msgId = mediaId;
+              String appidToUse = microId.equals(ToUserName) ? microappid : microappid2;
+              String url = dealWx.getMedia(mediaId, appidToUse);
+              if (url != null && !url.isEmpty()) {
+                smartRobot.dealVoice(openid, url, appidToUse, msgId);
+              }
+            }
+            case "link" -> {
+              String openid = JSON.parseObject(bodyInfo).getString("FromUserName");
+              String title = JSON.parseObject(bodyInfo).getString("Title");
+              String description = JSON.parseObject(bodyInfo).getString("Description");
+              String linkUrl = JSON.parseObject(bodyInfo).getString("Url");
+              String msgId = JSON.parseObject(bodyInfo).getString("MsgId");
+              if (title == null) title = "";
+              if (description == null) description = "";
+              if (linkUrl == null) linkUrl = "";
+              String appidToUse = microId.equals(ToUserName) ? microappid : microappid2;
+              smartRobot.smartSendLinkContent(openid, linkUrl, title, description, appidToUse, msgId);
+            }
+            case "location" -> {
+              String openid = JSON.parseObject(bodyInfo).getString("FromUserName");
+              String latitude = JSON.parseObject(bodyInfo).getString("Location_X");
+              String longitude = JSON.parseObject(bodyInfo).getString("Location_Y");
+              String label = JSON.parseObject(bodyInfo).getString("Label");
+              String msgId = JSON.parseObject(bodyInfo).getString("MsgId");
+              if (latitude == null) latitude = "";
+              if (longitude == null) longitude = "";
+              if (label == null) label = "";
+              String normalizedContent =
+                  ("[位置] 纬度:" + latitude + " 经度:" + longitude + (label.isBlank() ? "" : " 标注:" + label))
+                      .trim();
+              String appidToUse = microId.equals(ToUserName) ? microappid : microappid2;
+              smartRobot.smartSendContent(openid, normalizedContent, appidToUse, msgId);
+            }
             case "event" -> {
               String event = JSON.parseObject(bodyInfo).getString("Event");
               String openid = (String) JSON.parseObject(bodyInfo).get("FromUserName");

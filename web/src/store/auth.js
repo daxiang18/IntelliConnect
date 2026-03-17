@@ -1,5 +1,5 @@
 import router, { constantRoutes, asyncRoutes } from '@/router'
-import { jwtDecode } from "jwt-decode";
+import { jwtDecode } from 'jwt-decode'
 import { loginIn } from '@/api/user'
 import { start } from 'nprogress'
 
@@ -48,11 +48,15 @@ export default {
 
 function traversalRoutes(routes, auth) {
   const result = []
+  const decoded = jwtDecode(auth)
+  // JWT role 可能是 "ROLE_xxx"（微信登录）或 "[ROLE_xxx]"（账号密码登录）
+  // 路由 meta.auth 数组格式统一为 "[ROLE_xxx]"
+  // 需要同时匹配两种格式
+  const rawRole = decoded.role || ''
+  const normalizedRole = rawRole.startsWith('[') ? rawRole : '[' + rawRole + ']'
   routes.forEach((r) => {
-    let { meta, children} = r
-    jwtDecode(auth)
-    meta.auth.includes(jwtDecode(auth).role)
-    if (meta.auth.includes(jwtDecode(auth).role)) {
+    let { meta, children } = r
+    if (meta.auth.includes(rawRole) || meta.auth.includes(normalizedRole)) {
       if (children && children.length) {
         r.children = traversalRoutes(children, auth)
       }

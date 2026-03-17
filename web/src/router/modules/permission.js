@@ -5,7 +5,7 @@ export default [
     component: () => import('@/layout/defaultRouter.vue'),
     meta: {
       title: 'permission',
-      auth: ['[ROLE_admin]', '[ROLE_guest]'],
+      auth: ['[ROLE_admin]', '[ROLE_guest]', '[ROLE_wx_user]'],
       icon: 'KeyOutlined',
     },
     redirect: {
@@ -18,7 +18,7 @@ export default [
         component: () => import('@/views/permission/btnPermission.vue'),
         meta: {
           title: 'btnPermission',
-          auth: ['[ROLE_admin]', '[ROLE_guest]'],
+          auth: ['[ROLE_admin]', '[ROLE_guest]', '[ROLE_wx_user]'],
         },
       },
       {
@@ -36,7 +36,7 @@ export default [
         component: () => import('@/views/permission/userPermission.vue'),
         meta: {
           title: 'userPermission',
-          auth: ['[ROLE_admin]','[ROLE_guest]'],
+          auth: ['[ROLE_admin]', '[ROLE_guest]', '[ROLE_wx_user]'],
         },
       },
     ],

@@ -43,10 +43,8 @@ router.beforeEach(async (to, from, next) => {
       if (!menuList.length) {
         const auth = token
         store.commit('auth/GENERATE_ROUTES', { auth, domainState })
-        return next({
-          path: resolveTargetPath(domainState, to.path),
-          replace: true,
-        })
+        // addRoute 后用 path 重新触发导航，让 Vue Router 重新匹配新注册的路由
+        return next({ path: to.fullPath, replace: true })
       }
 
       if (to.path === '/' || !to.matched.length) {

@@ -6,7 +6,7 @@ export default [
     component: () => import('@/layout/defaultRouter.vue'),
     meta: {
       title: 'hubPage',
-      auth: ['[ROLE_admin]', '[ROLE_guest]'],
+      auth: ['[ROLE_admin]', '[ROLE_guest]', '[ROLE_wx_user]'],
       icon: 'RobotOutlined',
       domain: 'hub',
     },
@@ -18,7 +18,7 @@ export default [
         component: () => import('@/views/productXiaoZhi/index.vue'),
         meta: {
           title: 'productXiaoZhi',
-          auth: ['[ROLE_admin]', '[ROLE_guest]'],
+          auth: ['[ROLE_admin]', '[ROLE_guest]', '[ROLE_wx_user]'],
           domain: 'hub',
         },
       },
@@ -28,7 +28,7 @@ export default [
         component: () => import('@/views/productRole/index.vue'),
         meta: {
           title: 'productRole',
-          auth: ['[ROLE_admin]', '[ROLE_guest]'],
+          auth: ['[ROLE_admin]', '[ROLE_guest]', '[ROLE_wx_user]'],
           domain: 'hub',
         },
       },
@@ -38,7 +38,7 @@ export default [
         component: () => import('@/views/agentLongMemory/index.vue'),
         meta: {
           title: 'agentLongMemory',
-          auth: ['[ROLE_admin]', '[ROLE_guest]'],
+          auth: ['[ROLE_admin]', '[ROLE_guest]', '[ROLE_wx_user]'],
           domain: 'hub',
         },
       },
@@ -48,7 +48,7 @@ export default [
         component: () => import('@/views/productAgentMemory/index.vue'),
         meta: {
           title: 'agentMemory',
-          auth: ['[ROLE_admin]', '[ROLE_guest]'],
+          auth: ['[ROLE_admin]', '[ROLE_guest]', '[ROLE_wx_user]'],
           domain: 'hub',
         },
       },
@@ -58,7 +58,7 @@ export default [
         component: () => import('@/views/productRouterSet/index.vue'),
         meta: {
           title: 'productRouterSet',
-          auth: ['[ROLE_admin]', '[ROLE_guest]'],
+          auth: ['[ROLE_admin]', '[ROLE_guest]', '[ROLE_wx_user]'],
           domain: 'hub',
         },
       },
@@ -68,7 +68,7 @@ export default [
         component: () => import('@/views/productKnowledge/index.vue'),
         meta: {
           title: 'productKnowledge',
-          auth: ['[ROLE_admin]', '[ROLE_guest]'],
+          auth: ['[ROLE_admin]', '[ROLE_guest]', '[ROLE_wx_user]'],
           domain: 'hub',
         },
       },
@@ -78,7 +78,7 @@ export default [
         component: () => import('@/views/productMcp/index.vue'),
         meta: {
           title: 'productMcp',
-          auth: ['[ROLE_admin]', '[ROLE_guest]'],
+          auth: ['[ROLE_admin]', '[ROLE_guest]', '[ROLE_wx_user]'],
           domain: 'hub',
         },
       },
@@ -88,7 +88,7 @@ export default [
         component: () => import('@/views/productSkills/index.vue'),
         meta: {
           title: 'productSkills',
-          auth: ['[ROLE_admin]', '[ROLE_guest]'],
+          auth: ['[ROLE_admin]', '[ROLE_guest]', '[ROLE_wx_user]'],
           domain: 'hub',
         },
       },
@@ -98,7 +98,7 @@ export default [
         component: () => import('@/views/llmProviderInformation/index.vue'),
         meta: {
           title: 'llmProviderInformation',
-          auth: ['[ROLE_admin]', '[ROLE_guest]'],
+          auth: ['[ROLE_admin]', '[ROLE_guest]', '[ROLE_wx_user]'],
           domain: 'hub',
         },
       },
@@ -108,7 +108,7 @@ export default [
         component: () => import('@/views/productLlmModel/index.vue'),
         meta: {
           title: 'productLlmModel',
-          auth: ['[ROLE_admin]', '[ROLE_guest]'],
+          auth: ['[ROLE_admin]', '[ROLE_guest]', '[ROLE_wx_user]'],
           domain: 'hub',
         },
       },
@@ -118,7 +118,7 @@ export default [
         component: () => import('@/views/knowledgeGraphic/index.vue'),
         meta: {
           title: 'knowledgeGraphic',
-          auth: ['[ROLE_admin]', '[ROLE_guest]'],
+          auth: ['[ROLE_admin]', '[ROLE_guest]', '[ROLE_wx_user]'],
           domain: 'hub',
         },
       },

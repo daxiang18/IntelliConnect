@@ -600,7 +600,7 @@ const stopCountdown = () => {
   }
 }
 
-// 微信扫码登录成功处理
+// 微信扫码登录成功处理（与账号密码登录 handleSubmit 保持完全一致的流程）
 const handleWxLoginSuccess = async (token) => {
   try {
     store.commit('auth/SET_AUTH', token)
@@ -609,7 +609,10 @@ const handleWxLoginSuccess = async (token) => {
     store.commit('auth/GENERATE_ROUTES', { auth: token, domainState })
     const redirectTarget = Array.isArray(route.query.redirect) ? route.query.redirect[0] : route.query.redirect
     message.success('登录成功')
-    router.replace(resolveTargetPath(domainState, redirectTarget))
+    // 使用 window.location 强制跳转，绕过 Vue Router addRoute 时序问题
+    const target = resolveTargetPath(domainState, redirectTarget)
+    window.location.hash = '#' + target
+    window.location.reload()
   } catch (err) {
     console.error('微信登录跳转失败:', err)
     message.error('登录成功但跳转失败，请刷新页面')

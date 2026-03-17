@@ -10,7 +10,7 @@ export const asyncRoutes = [
     component: () => import('@/views/home/index.vue'),
     meta: {
       title: 'homePage',
-      auth: ['[ROLE_admin]', '[ROLE_guest]'],
+      auth: ['[ROLE_admin]', '[ROLE_guest]', '[ROLE_wx_user]'],
       icon: 'HomeOutlined',
       domain: 'shared',
     },
@@ -21,7 +21,7 @@ export const asyncRoutes = [
     component: () => import('@/views/dashboard/index.vue'),
     meta: {
       title: 'dashboard',
-      auth: ['[ROLE_admin]', '[ROLE_guest]'],
+      auth: ['[ROLE_admin]', '[ROLE_guest]', '[ROLE_wx_user]'],
       icon: 'DashboardOutlined',
       domain: 'shared',
     },
@@ -32,7 +32,7 @@ export const asyncRoutes = [
     component: () => import('@/views/setting/index.vue'),
     meta: {
       title: 'setting',
-      auth: ['[ROLE_admin]', '[ROLE_guest]'],
+      auth: ['[ROLE_admin]', '[ROLE_guest]', '[ROLE_wx_user]'],
       icon: 'SettingOutlined',
       isHidden: true,
       domain: 'shared',
@@ -47,7 +47,7 @@ export const asyncRoutes = [
     name: 'About',
     component: () => import('@/views/about/index.vue'),
     meta: {
-      auth: ['[ROLE_admin]', '[ROLE_guest]'],
+      auth: ['[ROLE_admin]', '[ROLE_guest]', '[ROLE_wx_user]'],
       title: 'about',
       domain: 'shared',
     },

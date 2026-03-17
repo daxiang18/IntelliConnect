@@ -1,6 +1,6 @@
 hub:
   enabled: true
-  default-entry: /home
+  default-entry: /hubDashboard
   menu-group: hub
 
 iot:

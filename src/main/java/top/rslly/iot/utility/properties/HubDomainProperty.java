@@ -32,6 +32,6 @@ import org.springframework.context.annotation.Configuration;
 @ConfigurationProperties(prefix = "hub")
 public class HubDomainProperty {
   private boolean enabled = true;
-  private String defaultEntry = "/hub/knowledge";
+  private String defaultEntry = "/hubDashboard";
   private String menuGroup = "hub";
 }

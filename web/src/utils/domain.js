@@ -1,14 +1,17 @@
 import { asyncRoutes } from '@/router/asyncRoutes'
 
 const DOMAIN_ROUTE_ALIASES = {
-  '/hub': '/home',
+  '/hub': '/hubDashboard',
   '/hub/home': '/home',
-  '/hub/inbox': '/home',
-  '/hub/notes': '/home',
+  '/hub/inbox': '/inbox',
+  '/hub/notes': '/quickNote',
   '/hub/knowledge': '/productKnowledge',
   '/hub/graph': '/knowledgeGraphic',
   '/hub/memory': '/agentLongMemory',
   '/hub/settings': '/setting',
+  '/hub/dashboard': '/hubDashboard',
+  '/hub/archive': '/archive',
+  '/hub/sync': '/syncStatus',
   '/iot': '/product',
   '/iot/product': '/product',
   '/iot/dashboard': '/deviceData',
@@ -44,7 +47,7 @@ export function canAccessPath(domainState, targetPath) {
 export function resolveDomainEntry(domainState, domainKey) {
   const domainConfig = domainState && domainState[domainKey]
   const defaultEntries = {
-    hub: '/home',
+    hub: '/hubDashboard',
     iot: '/product',
   }
   const configuredPath = normalizeDomainPath(domainConfig && domainConfig.defaultEntry)
@@ -62,7 +65,8 @@ export function resolveDomainEntry(domainState, domainKey) {
 }
 
 export function resolveTargetPath(domainState, requestedPath) {
-  const normalizedPath = requestedPath && requestedPath !== '/' ? normalizeDomainPath(requestedPath) : ''
+  const normalizedPath =
+    requestedPath && requestedPath !== '/' ? normalizeDomainPath(requestedPath) : ''
 
   if (normalizedPath && canAccessPath(domainState, normalizedPath)) {
     return normalizedPath

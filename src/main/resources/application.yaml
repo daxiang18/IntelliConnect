@@ -233,7 +233,7 @@ feishu:
 # ---- 域配置（个人中枢二开分域支持） ----
 hub:
   enabled: true
-  default-entry: /hub/knowledge
+  default-entry: /hubDashboard
   menu-group: hub
 
 iot:

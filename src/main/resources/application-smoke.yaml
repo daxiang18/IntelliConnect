@@ -30,7 +30,7 @@ wx:
   debug: true
 
 hub:
-  default-entry: /home
+  default-entry: /hubDashboard
 
 iot:
   enabled: false

@@ -168,4 +168,18 @@ public class InputController {
       @RequestHeader("Authorization") String header) {
     return inputMessageService.listSyncMessages(syncStatus, page, size, header);
   }
+
+  @Operation(summary = "批量处理消息", description = "批量触发消息处理（最多50条），仅处理当前用户所有的 received/failed 状态消息")
+  @RequestMapping(value = "/messages/batch-process", method = RequestMethod.POST)
+  public JsonResult<?> batchProcessMessages(@RequestBody java.util.List<Long> ids,
+      @RequestHeader("Authorization") String header) {
+    return inputMessageService.batchProcessMessages(ids, header);
+  }
+
+  @Operation(summary = "批量删除消息", description = "批量删除消息（最多50条），仅删除当前用户所有的消息")
+  @RequestMapping(value = "/messages/batch-delete", method = RequestMethod.POST)
+  public JsonResult<?> batchDeleteMessages(@RequestBody java.util.List<Long> ids,
+      @RequestHeader("Authorization") String header) {
+    return inputMessageService.batchDeleteMessages(ids, header);
+  }
 }

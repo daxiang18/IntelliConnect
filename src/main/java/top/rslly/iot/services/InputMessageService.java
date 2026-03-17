@@ -24,6 +24,8 @@ import top.rslly.iot.param.request.InputMessagePromoteParam;
 import top.rslly.iot.param.request.InputMessageRecallParam;
 import top.rslly.iot.utility.result.JsonResult;
 
+import java.util.List;
+
 public interface InputMessageService {
   JsonResult<?> createMessage(InputMessageCreateParam inputMessageCreateParam, String token);
 
@@ -63,4 +65,10 @@ public interface InputMessageService {
 
   /** 同步消息列表：查询有同步目标的消息，支持按同步状态筛选 */
   JsonResult<?> listSyncMessages(String syncStatus, Integer page, Integer size, String token);
+
+  /** 批量处理消息 */
+  JsonResult<?> batchProcessMessages(List<Long> ids, String token);
+
+  /** 批量删除消息 */
+  JsonResult<?> batchDeleteMessages(List<Long> ids, String token);
 }

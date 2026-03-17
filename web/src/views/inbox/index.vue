@@ -63,9 +63,58 @@
       </a-space>
     </div>
 
-    <!-- 统计信息栏 -->
+    <!-- 统计信息栏 + 全选 -->
     <div class="inbox-stats" v-if="total > 0">
-      <span class="stats-text">共 {{ total }} 条消息</span>
+      <div class="stats-left">
+        <a-checkbox
+          :checked="isAllSelected"
+          :indeterminate="isPartialSelected"
+          @change="toggleSelectAll"
+        >
+          全选
+        </a-checkbox>
+        <span class="stats-text">共 {{ total }} 条消息</span>
+      </div>
+      <div class="stats-right" v-if="autoRefreshEnabled">
+        <span class="auto-refresh-hint">自动刷新中</span>
+      </div>
+    </div>
+
+    <!-- 批量操作浮动栏 -->
+    <transition name="slide-up">
+      <div class="batch-bar" v-if="selectedIds.size > 0">
+        <span class="batch-count">已选 {{ selectedIds.size }} 条</span>
+        <a-space>
+          <a-popconfirm
+            title="确定批量处理选中的消息吗？"
+            ok-text="确定"
+            cancel-text="取消"
+            @confirm="handleBatchProcess"
+          >
+            <a-button size="small" type="primary" :loading="batchLoading">
+              <template #icon><ThunderboltOutlined /></template>
+              批量处理
+            </a-button>
+          </a-popconfirm>
+          <a-popconfirm
+            title="确定批量删除选中的消息吗？此操作不可恢复！"
+            ok-text="确定"
+            cancel-text="取消"
+            @confirm="handleBatchDelete"
+          >
+            <a-button size="small" danger :loading="batchLoading">
+              <template #icon><DeleteOutlined /></template>
+              批量删除
+            </a-button>
+          </a-popconfirm>
+          <a-button size="small" @click="clearSelection">取消选择</a-button>
+        </a-space>
+      </div>
+    </transition>
+
+    <!-- 新消息提示条 -->
+    <div class="new-msg-tip" v-if="hasNewMessages" @click="refreshList">
+      有新消息到达，点击刷新
     </div>
 
     <!-- 消息列表 -->
@@ -86,10 +135,18 @@
             v-for="msg in messages"
             :key="msg.id"
             class="message-card"
-            :class="{ 'message-failed': msg.status === 'failed' }"
+            :class="{
+              'message-failed': msg.status === 'failed',
+              'message-selected': selectedIds.has(msg.id),
+            }"
           >
             <div class="message-card-header">
               <div class="message-meta">
+                <a-checkbox
+                  :checked="selectedIds.has(msg.id)"
+                  @change="toggleSelect(msg.id)"
+                  @click.stop
+                />
                 <a-tag :color="sourceTypeColor(msg.sourceType)">{{ sourceTypeLabel(msg.sourceType) }}</a-tag>
                 <a-tag>{{ contentTypeLabel(msg.contentType) }}</a-tag>
                 <a-tag :color="statusColor(msg.status)">{{ statusLabel(msg.status) }}</a-tag>
@@ -168,23 +225,30 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   ReloadOutlined,
   EditOutlined,
   ThunderboltOutlined,
   RedoOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons-vue'
-import { getInboxMessages, processMessage, retryMessage } from '@/api/inbox'
+import { getInboxMessages, processMessage, retryMessage, batchProcessMessages, batchDeleteMessages } from '@/api/inbox'
 
 const loading = ref(false)
+const batchLoading = ref(false)
 const messages = ref([])
 const total = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(20)
 const keyword = ref('')
 const expandedIds = ref(new Set())
+const selectedIds = ref(new Set())
+const hasNewMessages = ref(false)
+const autoRefreshEnabled = ref(true)
+let autoRefreshTimer = null
+let lastTotal = 0
 
 const filters = reactive({
   sourceType: undefined,
@@ -192,8 +256,42 @@ const filters = reactive({
   contentType: undefined,
 })
 
-const fetchMessages = async () => {
-  loading.value = true
+// 批量选择
+const isAllSelected = computed(() => {
+  if (messages.value.length === 0) return false
+  return messages.value.every((msg) => selectedIds.value.has(msg.id))
+})
+
+const isPartialSelected = computed(() => {
+  if (messages.value.length === 0) return false
+  const someSelected = messages.value.some((msg) => selectedIds.value.has(msg.id))
+  return someSelected && !isAllSelected.value
+})
+
+const toggleSelectAll = () => {
+  if (isAllSelected.value) {
+    selectedIds.value = new Set()
+  } else {
+    selectedIds.value = new Set(messages.value.map((msg) => msg.id))
+  }
+}
+
+const toggleSelect = (id) => {
+  const newSet = new Set(selectedIds.value)
+  if (newSet.has(id)) {
+    newSet.delete(id)
+  } else {
+    newSet.add(id)
+  }
+  selectedIds.value = newSet
+}
+
+const clearSelection = () => {
+  selectedIds.value = new Set()
+}
+
+const fetchMessages = async (silent = false) => {
+  if (!silent) loading.value = true
   try {
     const params = {
       page: currentPage.value - 1,
@@ -207,35 +305,49 @@ const fetchMessages = async () => {
     const res = await getInboxMessages(params)
     const { data, errorCode } = res.data
     if (errorCode === 200 && data) {
-      messages.value = data.content || []
-      total.value = data.totalElements || 0
+      const newTotal = data.totalElements || 0
+      if (silent && newTotal > lastTotal && lastTotal > 0) {
+        hasNewMessages.value = true
+      } else {
+        messages.value = data.content || []
+        total.value = newTotal
+        hasNewMessages.value = false
+      }
+      lastTotal = newTotal
     }
   } catch (err) {
-    console.error('获取消息列表失败:', err)
-    message.error('获取消息列表失败')
+    if (!silent) {
+      console.error('获取消息列表失败:', err)
+      message.error('获取消息列表失败')
+    }
   } finally {
-    loading.value = false
+    if (!silent) loading.value = false
   }
 }
 
 const refreshList = () => {
   currentPage.value = 1
+  selectedIds.value = new Set()
+  hasNewMessages.value = false
   fetchMessages()
 }
 
 const handleSearch = () => {
   currentPage.value = 1
+  selectedIds.value = new Set()
   fetchMessages()
 }
 
 const handleFilterChange = () => {
   currentPage.value = 1
+  selectedIds.value = new Set()
   fetchMessages()
 }
 
 const handlePageChange = (page, size) => {
   currentPage.value = page
   pageSize.value = size
+  selectedIds.value = new Set()
   fetchMessages()
 }
 
@@ -270,6 +382,66 @@ const handleRetry = async (id) => {
     fetchMessages()
   } catch (err) {
     message.error('重试失败')
+  }
+}
+
+// 批量操作
+const handleBatchProcess = async () => {
+  const ids = Array.from(selectedIds.value)
+  if (ids.length === 0) return
+  batchLoading.value = true
+  try {
+    const res = await batchProcessMessages(ids)
+    const { data, errorCode } = res.data
+    if (errorCode === 200 && data) {
+      message.success(`批量处理完成：成功 ${data.processed} 条，跳过 ${data.skipped} 条`)
+    } else {
+      message.success('已提交批量处理')
+    }
+    selectedIds.value = new Set()
+    fetchMessages()
+  } catch (err) {
+    message.error('批量处理失败')
+  } finally {
+    batchLoading.value = false
+  }
+}
+
+const handleBatchDelete = async () => {
+  const ids = Array.from(selectedIds.value)
+  if (ids.length === 0) return
+  batchLoading.value = true
+  try {
+    const res = await batchDeleteMessages(ids)
+    const { data, errorCode } = res.data
+    if (errorCode === 200 && data) {
+      message.success(`批量删除完成：删除 ${data.deleted} 条，跳过 ${data.skipped} 条`)
+    } else {
+      message.success('已提交批量删除')
+    }
+    selectedIds.value = new Set()
+    fetchMessages()
+  } catch (err) {
+    message.error('批量删除失败')
+  } finally {
+    batchLoading.value = false
+  }
+}
+
+// 自动刷新（轮询）
+const startAutoRefresh = () => {
+  stopAutoRefresh()
+  autoRefreshTimer = setInterval(() => {
+    if (!loading.value && !batchLoading.value) {
+      fetchMessages(true)
+    }
+  }, 30000)
+}
+
+const stopAutoRefresh = () => {
+  if (autoRefreshTimer) {
+    clearInterval(autoRefreshTimer)
+    autoRefreshTimer = null
   }
 }
 
@@ -311,6 +483,11 @@ const formatTime = (timestamp) => {
 
 onMounted(() => {
   fetchMessages()
+  startAutoRefresh()
+})
+
+onUnmounted(() => {
+  stopAutoRefresh()
 })
 </script>
 
@@ -342,11 +519,91 @@ onMounted(() => {
 
 .inbox-stats {
   margin-bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.stats-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .stats-text {
   color: #999;
   font-size: 13px;
+}
+
+.auto-refresh-hint {
+  color: #52c41a;
+  font-size: 12px;
+}
+
+.auto-refresh-hint::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #52c41a;
+  margin-right: 4px;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* 批量操作栏 */
+.batch-bar {
+  position: sticky;
+  bottom: 16px;
+  z-index: 10;
+  background: #fff;
+  border: 1px solid #e6e6e6;
+  border-radius: 8px;
+  padding: 10px 16px;
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.08);
+}
+
+.batch-count {
+  font-weight: 600;
+  color: #1890ff;
+}
+
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: all 0.2s ease;
+}
+
+.slide-up-enter-from,
+.slide-up-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+/* 新消息提示条 */
+.new-msg-tip {
+  background: #e6f7ff;
+  border: 1px solid #91d5ff;
+  border-radius: 6px;
+  padding: 8px 16px;
+  margin-bottom: 12px;
+  text-align: center;
+  color: #1890ff;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.2s;
+}
+
+.new-msg-tip:hover {
+  background: #bae7ff;
 }
 
 .inbox-list {
@@ -368,7 +625,7 @@ onMounted(() => {
   border: 1px solid #f0f0f0;
   border-radius: 8px;
   padding: 16px;
-  transition: box-shadow 0.2s;
+  transition: box-shadow 0.2s, border-color 0.2s;
 }
 
 .message-card:hover {
@@ -377,6 +634,11 @@ onMounted(() => {
 
 .message-card.message-failed {
   border-left: 3px solid #ff4d4f;
+}
+
+.message-card.message-selected {
+  border-color: #1890ff;
+  background: #f0f7ff;
 }
 
 .message-card-header {
@@ -390,6 +652,7 @@ onMounted(() => {
   display: flex;
   gap: 4px;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .message-time {
@@ -436,6 +699,10 @@ onMounted(() => {
   right: 0;
   height: 30px;
   background: linear-gradient(transparent, #fff);
+}
+
+.message-selected .message-content-wrap.content-collapsed::after {
+  background: linear-gradient(transparent, #f0f7ff);
 }
 
 .message-url {

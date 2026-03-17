@@ -58,3 +58,19 @@ export const deleteMessage = (id) =>
     url: `/api/v2/input/messages/${id}`,
     method: 'delete',
   })
+
+/** 批量处理消息 */
+export const batchProcessMessages = (ids) =>
+  request({
+    url: '/api/v2/input/messages/batch-process',
+    method: 'post',
+    data: ids,
+  })
+
+/** 批量删除消息 */
+export const batchDeleteMessages = (ids) =>
+  request({
+    url: '/api/v2/input/messages/batch-delete',
+    method: 'post',
+    data: ids,
+  })

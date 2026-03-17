@@ -1246,4 +1246,77 @@ public class InputMessageServiceImpl implements InputMessageService {
     data.put("size", result.getSize());
     return ResultTool.success(data);
   }
+
+  @Override
+  @Transactional
+  public JsonResult<?> batchProcessMessages(List<Long> ids, String token) {
+    String username;
+    try {
+      username = resolveUsername(token);
+    } catch (Exception e) {
+      log.warn("batch process messages failed to parse token", e);
+      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
+    }
+    if (ids == null || ids.isEmpty() || ids.size() > 50) {
+      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
+    }
+
+    int successCount = 0;
+    int skipCount = 0;
+    for (Long id : ids) {
+      var opt = inputMessageRepository.findById(id);
+      if (opt.isEmpty() || !username.equals(opt.get().getCreatedBy())) {
+        skipCount++;
+        continue;
+      }
+      InputMessageEntity entity = opt.get();
+      if (!STATUS_RECEIVED.equals(entity.getStatus()) && !STATUS_FAILED.equals(entity.getStatus())) {
+        skipCount++;
+        continue;
+      }
+      processMessageForUsername(id, username);
+      successCount++;
+    }
+
+    JSONObject data = new JSONObject();
+    data.put("processed", successCount);
+    data.put("skipped", skipCount);
+    data.put("total", ids.size());
+    log.info("Batch process completed: user={}, processed={}, skipped={}, total={}", username, successCount, skipCount, ids.size());
+    return ResultTool.success(data);
+  }
+
+  @Override
+  @Transactional
+  public JsonResult<?> batchDeleteMessages(List<Long> ids, String token) {
+    String username;
+    try {
+      username = resolveUsername(token);
+    } catch (Exception e) {
+      log.warn("batch delete messages failed to parse token", e);
+      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
+    }
+    if (ids == null || ids.isEmpty() || ids.size() > 50) {
+      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
+    }
+
+    int deletedCount = 0;
+    int skipCount = 0;
+    for (Long id : ids) {
+      var opt = inputMessageRepository.findById(id);
+      if (opt.isEmpty() || !username.equals(opt.get().getCreatedBy())) {
+        skipCount++;
+        continue;
+      }
+      inputMessageRepository.deleteById(id);
+      deletedCount++;
+    }
+
+    JSONObject data = new JSONObject();
+    data.put("deleted", deletedCount);
+    data.put("skipped", skipCount);
+    data.put("total", ids.size());
+    log.info("Batch delete completed: user={}, deleted={}, skipped={}, total={}", username, deletedCount, skipCount, ids.size());
+    return ResultTool.success(data);
+  }
 }

@@ -52,6 +52,17 @@ export default [
           domain: 'hub',
         },
       },
+      {
+        path: '/messageDetail/:id',
+        name: 'messageDetail',
+        component: () => import('@/views/messageDetail/index.vue'),
+        meta: {
+          title: 'messageDetail',
+          auth: ['[ROLE_admin]', '[ROLE_guest]', '[ROLE_wx_user]'],
+          domain: 'hub',
+          hidden: true, // 不在侧边栏显示
+        },
+      },
     ],
   },
   {

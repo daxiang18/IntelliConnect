@@ -80,6 +80,7 @@ const hubCore = {
   inbox: 'Inbox',
   quickNote: 'Quick Note',
   archive: 'Archive',
+  messageDetail: 'Message Detail',
 }
 const permission = {
   permission: 'SystemSetting',

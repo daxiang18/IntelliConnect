@@ -138,4 +138,18 @@ public class InputController {
   public JsonResult<?> getMessageStats(@RequestHeader("Authorization") String header) {
     return inputMessageService.getMessageStats(header);
   }
+
+  @Operation(summary = "查询单条消息详情", description = "按 ID 查询当前用户的单条输入消息完整信息")
+  @RequestMapping(value = "/messages/{id}", method = RequestMethod.GET)
+  public JsonResult<?> getMessageById(@PathVariable("id") @Min(1) long id,
+      @RequestHeader("Authorization") String header) {
+    return inputMessageService.getMessageById(id, header);
+  }
+
+  @Operation(summary = "删除输入消息", description = "仅允许消息所有者删除自己的消息")
+  @RequestMapping(value = "/messages/{id}", method = RequestMethod.DELETE)
+  public JsonResult<?> deleteMessage(@PathVariable("id") @Min(1) long id,
+      @RequestHeader("Authorization") String header) {
+    return inputMessageService.deleteMessage(id, header);
+  }
 }

@@ -44,3 +44,17 @@ export const getMessageStats = () =>
     url: '/api/v2/input/messages/stats',
     method: 'get',
   })
+
+/** 查询单条消息详情 */
+export const getMessageById = (id) =>
+  request({
+    url: `/api/v2/input/messages/${id}`,
+    method: 'get',
+  })
+
+/** 删除消息 */
+export const deleteMessage = (id) =>
+  request({
+    url: `/api/v2/input/messages/${id}`,
+    method: 'delete',
+  })

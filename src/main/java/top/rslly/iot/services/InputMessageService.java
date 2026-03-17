@@ -51,4 +51,10 @@ public interface InputMessageService {
 
   /** 消息统计：按状态和来源类型分组统计 */
   JsonResult<?> getMessageStats(String token);
+
+  /** 查询单条消息详情 */
+  JsonResult<?> getMessageById(long id, String token);
+
+  /** 删除消息（仅所有者可操作） */
+  JsonResult<?> deleteMessage(long id, String token);
 }

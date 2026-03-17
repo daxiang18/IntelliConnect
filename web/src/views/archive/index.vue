@@ -83,7 +83,12 @@
                   {{ statusLabel(msg.status) }}
                 </a-tag>
               </div>
-              <span class="archive-time">{{ formatTime(msg.receivedAt) }}</span>
+              <div class="archive-header-right">
+                <span class="archive-time">{{ formatTime(msg.receivedAt) }}</span>
+                <a-button type="link" size="small" class="detail-link" @click="$router.push(`/messageDetail/${msg.id}`)">
+                  详情
+                </a-button>
+              </div>
             </div>
             <div class="archive-card-body">
               <div
@@ -329,6 +334,23 @@ onMounted(() => {
   color: #999;
   font-size: 13px;
   white-space: nowrap;
+}
+
+.archive-header-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.detail-link {
+  padding: 0;
+  height: auto;
+  font-size: 12px;
+  color: #999;
+}
+
+.detail-link:hover {
+  color: #1890ff;
 }
 
 .archive-card-body {

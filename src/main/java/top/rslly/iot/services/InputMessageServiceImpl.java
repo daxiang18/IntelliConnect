@@ -1146,4 +1146,50 @@ public class InputMessageServiceImpl implements InputMessageService {
     data.put("total", totalCount);
     return ResultTool.success(data);
   }
+
+  @Override
+  public JsonResult<?> getMessageById(long id, String token) {
+    String username;
+    try {
+      username = resolveUsername(token);
+    } catch (Exception e) {
+      log.warn("get message by id failed to parse token", e);
+      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
+    }
+
+    var optMsg = inputMessageRepository.findById(id);
+    if (optMsg.isEmpty()) {
+      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
+    }
+    InputMessageEntity msg = optMsg.get();
+    if (!username.equals(msg.getCreatedBy())) {
+      return ResultTool.fail(ResultCode.NO_PERMISSION);
+    }
+    return ResultTool.success(msg);
+  }
+
+  @Override
+  @Transactional
+  public JsonResult<?> deleteMessage(long id, String token) {
+    String username;
+    try {
+      username = resolveUsername(token);
+    } catch (Exception e) {
+      log.warn("delete message failed to parse token", e);
+      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
+    }
+
+    var optMsg = inputMessageRepository.findById(id);
+    if (optMsg.isEmpty()) {
+      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
+    }
+    InputMessageEntity msg = optMsg.get();
+    if (!username.equals(msg.getCreatedBy())) {
+      return ResultTool.fail(ResultCode.NO_PERMISSION);
+    }
+
+    inputMessageRepository.deleteById(id);
+    log.info("Message deleted: id={}, createdBy={}", id, username);
+    return ResultTool.success();
+  }
 }

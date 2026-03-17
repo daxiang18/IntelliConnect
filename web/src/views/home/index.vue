@@ -103,15 +103,16 @@ const domainState = computed(() => store.state.domain || {})
 const domainCards = computed(() => [
   {
     key: 'hub',
-    title: '智能中枢',
-    description: '承接微信收集、速记归档、知识图谱、记忆与同步主链路。',
+    title: '个人中枢',
+    description: '消息收件箱、快速速记、知识归档浏览、中枢仪表盘，以及智能体配置与知识库管理。',
     enabled: !!domainState.value.hub?.enabled,
     menuGroup: domainState.value.hub?.menuGroup || 'hub',
     target: resolveDomainEntry(domainState.value, 'hub'),
     quickLinks: [
-      { label: '知识库配置', path: '/productKnowledge' },
-      { label: '知识图谱', path: '/knowledgeGraphic' },
-      { label: '长期记忆', path: '/agentLongMemory' },
+      { label: '中枢概览', path: '/hubDashboard' },
+      { label: '消息收件箱', path: '/inbox' },
+      { label: '快速速记', path: '/quickNote' },
+      { label: '知识归档', path: '/archive' },
     ],
   },
   {

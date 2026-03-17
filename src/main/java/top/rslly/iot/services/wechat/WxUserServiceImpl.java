@@ -175,7 +175,8 @@ public class WxUserServiceImpl implements WxUserService {
   public JsonResult<?> checkScanLoginStatus(String sceneId) {
     WxScanCheckResponse response = new WxScanCheckResponse();
 
-    Object value = redisUtil.get(SCAN_LOGIN_PREFIX + sceneId);
+    String redisKey = SCAN_LOGIN_PREFIX + sceneId;
+    Object value = redisUtil.get(redisKey);
     if (value == null) {
       // sceneId 已过期或不存在
       response.setStatus("expired");
@@ -192,8 +193,13 @@ public class WxUserServiceImpl implements WxUserService {
     }
 
     // 值是 openid，说明用户已扫码
+    // 先原子删除 Redis key，防止并发轮询重复处理
+    redisUtil.del(redisKey);
+
     String openid = strValue;
     response.setStatus("scanned");
+
+    log.info("扫码登录处理开始: sceneId={}, openid={}, officialAppid={}", sceneId, openid, officialAppid);
 
     // 查找或创建用户
     List<WxUserEntity> users = wxUserRepository.findAllByAppidAndOpenid(officialAppid, openid);
@@ -207,9 +213,11 @@ public class WxUserServiceImpl implements WxUserService {
       wxUserRepository.save(entity);
       currentUser = entity;
       response.setIsNewUser(true);
+      log.info("扫码登录: 新用户创建成功, id={}, name={}, openid={}", entity.getId(), entity.getName(), openid);
     } else {
       currentUser = users.get(0);
       response.setIsNewUser(false);
+      log.info("扫码登录: 已有用户匹配, id={}, name={}, openid={}", currentUser.getId(), currentUser.getName(), openid);
     }
 
     // 颁发 JWT
@@ -217,21 +225,20 @@ public class WxUserServiceImpl implements WxUserService {
         + JwtTokenUtil.createToken(currentUser.getName(), "ROLE_wx_user");
     response.setToken(token);
 
-    // 登录完成，清除 Redis 中的场景值（防止重复使用）
-    redisUtil.del(SCAN_LOGIN_PREFIX + sceneId);
-
-    log.info("扫码登录成功，sceneId={}, openid={}, isNewUser={}", sceneId, openid, response.getIsNewUser());
+    log.info("扫码登录成功: sceneId={}, openid={}, userId={}, isNewUser={}", sceneId, openid, currentUser.getId(), response.getIsNewUser());
     return ResultTool.success(response);
   }
 
   @Override
   public void handleScanEvent(String openid, String sceneStr) {
     if (sceneStr == null || sceneStr.isEmpty()) {
+      log.warn("handleScanEvent: sceneStr 为空, openid={}", openid);
       return;
     }
     // 检查 Redis 中是否存在该 sceneId 的等待记录
     String redisKey = SCAN_LOGIN_PREFIX + sceneStr;
     Object value = redisUtil.get(redisKey);
+    log.info("handleScanEvent: openid={}, sceneStr={}, redisKey={}, currentValue={}", openid, sceneStr, redisKey, value);
     if (value != null && "waiting".equals(value.toString())) {
       // 将值从 "waiting" 更新为用户的 openid，保留原有过期时间
       long ttl = redisUtil.getExpire(redisKey);
@@ -240,9 +247,9 @@ public class WxUserServiceImpl implements WxUserService {
       } else {
         redisUtil.set(redisKey, openid, scanLoginExpireSeconds);
       }
-      log.info("扫码事件处理成功，sceneStr={}, openid={}", sceneStr, openid);
+      log.info("handleScanEvent: 成功写入 openid, sceneStr={}, openid={}, ttl={}", sceneStr, openid, ttl);
     } else {
-      log.warn("扫码事件未匹配到等待中的登录请求，sceneStr={}", sceneStr);
+      log.warn("handleScanEvent: 未匹配到等待中的登录请求, sceneStr={}, currentValue={}", sceneStr, value);
     }
   }
 }

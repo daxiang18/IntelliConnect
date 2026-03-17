@@ -48,20 +48,20 @@ const chart = {
   basicChart: 'BasicChart',
   mapChart: 'Echarts Map',
 }
-const product ={
+const product = {
   productPage: 'IoT Products',
   hubPage: 'Smart Hub',
-  productXiaoZhi:'productXiaoZhi',
-  productRole:'productRole',
-  agentMemory:'agentMemory',
-  agentLongMemory:'agentLongMemory',
-  productRouterSet:'productRouterSet',
-  productKnowledge:'productKnowledge',
+  productXiaoZhi: 'productXiaoZhi',
+  productRole: 'productRole',
+  agentMemory: 'agentMemory',
+  agentLongMemory: 'agentLongMemory',
+  productRouterSet: 'productRouterSet',
+  productKnowledge: 'productKnowledge',
   productMcp: 'mcpServerAdd',
-  productAdd : 'productAdd',
+  productAdd: 'productAdd',
   productModelAdd: 'productModelAdd',
   productDataAdd: 'productDataAdd',
-  productFunctionAdd: "productFunctionAdd",
+  productFunctionAdd: 'productFunctionAdd',
   productDeviceAdd: 'productDeviceAdd',
   productEventAdd: 'productEventAdd',
   productEventDataAdd: 'productEventDataAdd',
@@ -71,8 +71,13 @@ const product ={
   alarmEventAdd: 'alarmEventAdd',
   llmProviderInformation: 'Model Provider',
   productLlmModel: 'LLM Model',
-  knowledgeGraphic: "knowledgeGraphic",
-  productSkills: 'Product Skills'
+  knowledgeGraphic: 'knowledgeGraphic',
+  productSkills: 'Product Skills',
+}
+const hubCore = {
+  hubCorePage: 'Personal Hub',
+  inbox: 'Inbox',
+  quickNote: 'Quick Note',
 }
 const permission = {
   permission: 'SystemSetting',
@@ -110,6 +115,7 @@ export default {
   ...realProject,
   ...deviceData,
   ...product,
+  ...hubCore,
   setting: 'Setting',
   about: 'About',
 }

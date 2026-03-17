@@ -44,4 +44,8 @@ public interface InputMessageService {
 
   JsonResult<?> promoteMessageToLongMemory(long id, InputMessagePromoteParam inputMessagePromoteParam,
       String token);
+
+  /** 收件箱：分页查询当前用户所有消息，支持按来源类型、状态、内容类型筛选 */
+  JsonResult<?> listMessages(String sourceType, String status, String contentType,
+      Integer page, Integer size, String token);
 }

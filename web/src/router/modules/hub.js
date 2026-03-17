@@ -1,5 +1,39 @@
-// Hub 域路由 — AI / 智能体 / 知识库相关页面
+// Hub 域路由 — 个人中枢 + AI / 智能体 / 知识库相关页面
 export default [
+  {
+    path: '/hubCore',
+    name: 'HubCore',
+    component: () => import('@/layout/defaultRouter.vue'),
+    meta: {
+      title: 'hubCorePage',
+      auth: ['[ROLE_admin]', '[ROLE_guest]', '[ROLE_wx_user]'],
+      icon: 'InboxOutlined',
+      domain: 'hub',
+    },
+    redirect: { path: '/inbox' },
+    children: [
+      {
+        path: '/inbox',
+        name: 'inbox',
+        component: () => import('@/views/inbox/index.vue'),
+        meta: {
+          title: 'inbox',
+          auth: ['[ROLE_admin]', '[ROLE_guest]', '[ROLE_wx_user]'],
+          domain: 'hub',
+        },
+      },
+      {
+        path: '/quickNote',
+        name: 'quickNote',
+        component: () => import('@/views/quickNote/index.vue'),
+        meta: {
+          title: 'quickNote',
+          auth: ['[ROLE_admin]', '[ROLE_guest]', '[ROLE_wx_user]'],
+          domain: 'hub',
+        },
+      },
+    ],
+  },
   {
     path: '/hubConfig',
     name: 'HubConfig',

@@ -41,6 +41,21 @@ public interface InputMessageRepository extends JpaRepository<InputMessageEntity
 
   Page<InputMessageEntity> findAllBySessionIdAndCreatedBy(String sessionId, String createdBy, Pageable pageable);
 
+  /** 按创建者分页查询所有消息（收件箱列表） */
+  Page<InputMessageEntity> findAllByCreatedByOrderByReceivedAtDesc(String createdBy, Pageable pageable);
+
+  /** 按创建者和来源类型分页查询（收件箱筛选） */
+  Page<InputMessageEntity> findAllByCreatedByAndSourceTypeOrderByReceivedAtDesc(String createdBy, String sourceType,
+      Pageable pageable);
+
+  /** 按创建者和状态分页查询（收件箱筛选） */
+  Page<InputMessageEntity> findAllByCreatedByAndStatusOrderByReceivedAtDesc(String createdBy, String status,
+      Pageable pageable);
+
+  /** 按创建者和内容类型分页查询（收件箱筛选） */
+  Page<InputMessageEntity> findAllByCreatedByAndContentTypeOrderByReceivedAtDesc(String createdBy, String contentType,
+      Pageable pageable);
+
   @Query("""
       select entity from InputMessageEntity entity
       where entity.createdBy = :createdBy

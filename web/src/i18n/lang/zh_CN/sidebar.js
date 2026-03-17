@@ -55,20 +55,20 @@ const permission = {
   adminPermission: '管理员页面',
   userPermission: '用户页面',
 }
-const product ={
+const product = {
   productPage: '产品页面',
   hubPage: '智能中枢',
-  productXiaoZhi:'小智绑定',
-  productRole:'角色设置',
-  agentMemory:'记忆体设置',
-  agentLongMemory:'长期记忆设置',
-  productRouterSet:'语义路由配置',
-  productKnowledge:'知识库配置',
+  productXiaoZhi: '小智绑定',
+  productRole: '角色设置',
+  agentMemory: '记忆体设置',
+  agentLongMemory: '长期记忆设置',
+  productRouterSet: '语义路由配置',
+  productKnowledge: '知识库配置',
   productMcp: 'mcp服务器接入',
-  productAdd : '配置产品',
+  productAdd: '配置产品',
   productModelAdd: '配置物模型',
-  productDataAdd : '配置属性',
-  productFunctionAdd: "配置功能",
+  productDataAdd: '配置属性',
+  productFunctionAdd: '配置功能',
   productDeviceAdd: '配置设备',
   productEventAdd: '配置事件',
   productEventDataAdd: '配置事件参数',
@@ -79,7 +79,12 @@ const product ={
   knowledgeGraphic: '知识图谱',
   llmProviderInformation: '模型服务商配置',
   productLlmModel: '产品LLM模型配置',
-  productSkills: '产品技能配置'
+  productSkills: '产品技能配置',
+}
+const hubCore = {
+  hubCorePage: '个人中枢',
+  inbox: '消息收件箱',
+  quickNote: '快速速记',
 }
 const deviceData = {
   deviceDataPage: '设备数据',
@@ -108,6 +113,7 @@ export default {
   ...component,
   ...plugin,
   ...product,
+  ...hubCore,
   ...chart,
   ...permission,
   ...realProject,

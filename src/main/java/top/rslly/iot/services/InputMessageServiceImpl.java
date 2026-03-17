@@ -1074,4 +1074,41 @@ public class InputMessageServiceImpl implements InputMessageService {
     agentLongMemory.setMemoryValue(memoryValue);
     return agentLongMemoryService.postLongMemory(agentLongMemory);
   }
+
+  @Override
+  public JsonResult<?> listMessages(String sourceType, String status, String contentType,
+      Integer page, Integer size, String token) {
+    String username;
+    try {
+      username = resolveUsername(token);
+    } catch (Exception e) {
+      log.warn("list input messages failed to parse token", e);
+      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
+    }
+
+    int pageNum = (page != null && page >= 0) ? page : 0;
+    int pageSize = (size != null && size > 0 && size <= 100) ? size : 20;
+    PageRequest pageable = PageRequest.of(pageNum, pageSize);
+
+    Page<InputMessageEntity> result;
+    if (sourceType != null && !sourceType.isBlank()) {
+      result = inputMessageRepository.findAllByCreatedByAndSourceTypeOrderByReceivedAtDesc(username, sourceType,
+          pageable);
+    } else if (status != null && !status.isBlank()) {
+      result = inputMessageRepository.findAllByCreatedByAndStatusOrderByReceivedAtDesc(username, status, pageable);
+    } else if (contentType != null && !contentType.isBlank()) {
+      result = inputMessageRepository.findAllByCreatedByAndContentTypeOrderByReceivedAtDesc(username, contentType,
+          pageable);
+    } else {
+      result = inputMessageRepository.findAllByCreatedByOrderByReceivedAtDesc(username, pageable);
+    }
+
+    JSONObject data = new JSONObject();
+    data.put("content", result.getContent());
+    data.put("totalElements", result.getTotalElements());
+    data.put("totalPages", result.getTotalPages());
+    data.put("page", result.getNumber());
+    data.put("size", result.getSize());
+    return ResultTool.success(data);
+  }
 }

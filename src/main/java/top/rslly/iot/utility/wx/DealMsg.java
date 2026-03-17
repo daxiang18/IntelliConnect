@@ -74,6 +74,8 @@ public class DealMsg {
   private String defaultRegisterSuccessMessage;
   @Autowired
   private AdminConfigServiceImpl adminConfigService;
+  @Autowired
+  private WxMessageForwarder wxMessageForwarder;
 
   public void WxMsg(HttpServletRequest request, HttpServletResponse response) {
     boolean isGet = request.getMethod().equalsIgnoreCase("get");
@@ -125,6 +127,16 @@ public class DealMsg {
         InputStream is;
         is = request.getInputStream();
         String bodyInfo = IOUtils.toString(is, StandardCharsets.UTF_8);
+
+        // Check if this message should be forwarded to xiaozhi
+        if (wxMessageForwarder.checkAndForward(bodyInfo)) {
+          log.info("消息已转发给 xiaozhi，本地不处理");
+          PrintWriter out = response.getWriter();
+          out.print("success");
+          out.close();
+          return;
+        }
+
         try {
 
           // System.out.println(bodyInfo);

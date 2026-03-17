@@ -119,6 +119,9 @@ wx:
     appsecret2: XXXXXX
   msg:
     token: daxiangwawa666888
+  forward:
+    enabled: true
+    xiaozhi-url: http://localhost:8002/xiaozhi/wx/event
 storage:
   database: influxdb
 js:

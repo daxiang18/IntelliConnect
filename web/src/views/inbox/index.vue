@@ -60,6 +60,12 @@
           <a-select-option value="audio">音频</a-select-option>
           <a-select-option value="file">文件</a-select-option>
         </a-select>
+        <a-range-picker
+          v-model:value="dateRange"
+          :placeholder="['开始日期', '结束日期']"
+          style="width: 240px"
+          @change="handleDateRangeChange"
+        />
       </a-space>
     </div>
 
@@ -247,6 +253,7 @@ const expandedIds = ref(new Set())
 const selectedIds = ref(new Set())
 const hasNewMessages = ref(false)
 const autoRefreshEnabled = ref(true)
+const dateRange = ref(null)
 let autoRefreshTimer = null
 let lastTotal = 0
 
@@ -301,6 +308,10 @@ const fetchMessages = async (silent = false) => {
     if (filters.status) params.status = filters.status
     if (filters.contentType) params.contentType = filters.contentType
     if (keyword.value.trim()) params.keyword = keyword.value.trim()
+    if (dateRange.value && dateRange.value.length === 2) {
+      params.startTime = dateRange.value[0].startOf('day').valueOf()
+      params.endTime = dateRange.value[1].endOf('day').valueOf()
+    }
 
     const res = await getInboxMessages(params)
     const { data, errorCode } = res.data
@@ -339,6 +350,12 @@ const handleSearch = () => {
 }
 
 const handleFilterChange = () => {
+  currentPage.value = 1
+  selectedIds.value = new Set()
+  fetchMessages()
+}
+
+const handleDateRangeChange = () => {
   currentPage.value = 1
   selectedIds.value = new Set()
   fetchMessages()

@@ -1077,7 +1077,8 @@ public class InputMessageServiceImpl implements InputMessageService {
 
   @Override
   public JsonResult<?> listMessages(String sourceType, String status, String contentType,
-      String keyword, Boolean archived, Integer page, Integer size, String token) {
+      String keyword, Boolean archived, Long startTime, Long endTime,
+      Integer page, Integer size, String token) {
     String username;
     try {
       username = resolveUsername(token);
@@ -1098,7 +1099,7 @@ public class InputMessageServiceImpl implements InputMessageService {
     boolean archivedOnly = Boolean.TRUE.equals(archived);
 
     Page<InputMessageEntity> result = inputMessageRepository.searchMessages(
-        username, srcType, sts, cntType, kw, archivedOnly, pageable);
+        username, srcType, sts, cntType, kw, archivedOnly, startTime, endTime, pageable);
 
     JSONObject data = new JSONObject();
     data.put("content", result.getContent());

@@ -79,7 +79,7 @@ public interface InputMessageRepository extends JpaRepository<InputMessageEntity
       @Param("sessionId") String sessionId, @Param("createdBy") String createdBy, @Param("status") String status,
       @Param("threshold") Long threshold, Pageable pageable);
 
-  /** 通用多条件组合查询（支持关键词搜索） */
+  /** 通用多条件组合查询（支持关键词搜索 + 日期范围） */
   @Query("""
       select e from InputMessageEntity e
       where e.createdBy = :createdBy
@@ -88,6 +88,8 @@ public interface InputMessageRepository extends JpaRepository<InputMessageEntity
         and (:contentType is null or e.contentType = :contentType)
         and (:keyword is null or lower(coalesce(e.normalizedContent, e.rawContent, '')) like lower(concat('%', :keyword, '%')))
         and (:archivedOnly = false or e.status in ('parsed', 'archived', 'synced'))
+        and (:startTime is null or e.receivedAt >= :startTime)
+        and (:endTime is null or e.receivedAt <= :endTime)
       order by e.receivedAt desc
       """)
   Page<InputMessageEntity> searchMessages(
@@ -97,6 +99,8 @@ public interface InputMessageRepository extends JpaRepository<InputMessageEntity
       @Param("contentType") String contentType,
       @Param("keyword") String keyword,
       @Param("archivedOnly") boolean archivedOnly,
+      @Param("startTime") Long startTime,
+      @Param("endTime") Long endTime,
       Pageable pageable);
 
   /** 按创建者统计各状态消息数量 */

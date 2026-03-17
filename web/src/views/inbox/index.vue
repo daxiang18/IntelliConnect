@@ -12,7 +12,15 @@
 
     <!-- 筛选栏 -->
     <div class="inbox-filters">
-      <a-space :size="12">
+      <a-space :size="12" wrap>
+        <a-input-search
+          v-model:value="keyword"
+          placeholder="搜索消息内容..."
+          style="width: 220px"
+          allow-clear
+          @search="handleSearch"
+          @pressEnter="handleSearch"
+        />
         <a-select
           v-model:value="filters.sourceType"
           placeholder="来源类型"
@@ -55,10 +63,24 @@
       </a-space>
     </div>
 
+    <!-- 统计信息栏 -->
+    <div class="inbox-stats" v-if="total > 0">
+      <span class="stats-text">共 {{ total }} 条消息</span>
+    </div>
+
     <!-- 消息列表 -->
     <div class="inbox-list">
       <a-spin :spinning="loading">
-        <a-empty v-if="!loading && messages.length === 0" description="暂无消息" />
+        <!-- 空状态引导 -->
+        <div v-if="!loading && messages.length === 0" class="inbox-empty">
+          <a-empty description="暂无消息">
+            <a-button type="primary" @click="$router.push('/quickNote')">
+              <template #icon><EditOutlined /></template>
+              去快速速记
+            </a-button>
+          </a-empty>
+        </div>
+
         <div v-else class="message-cards">
           <div
             v-for="msg in messages"
@@ -69,28 +91,56 @@
             <div class="message-card-header">
               <div class="message-meta">
                 <a-tag :color="sourceTypeColor(msg.sourceType)">{{ sourceTypeLabel(msg.sourceType) }}</a-tag>
-                <a-tag>{{ msg.contentType }}</a-tag>
+                <a-tag>{{ contentTypeLabel(msg.contentType) }}</a-tag>
                 <a-tag :color="statusColor(msg.status)">{{ statusLabel(msg.status) }}</a-tag>
               </div>
               <span class="message-time">{{ formatTime(msg.receivedAt) }}</span>
             </div>
-            <div class="message-card-body">
-              <p class="message-content">{{ displayContent(msg) }}</p>
+            <div class="message-card-body" @click="toggleExpand(msg.id)">
+              <div
+                class="message-content-wrap"
+                :class="{ 'content-collapsed': !expandedIds.has(msg.id) && getContentLength(msg) > 200 }"
+              >
+                <p v-if="msg.contentType === 'url' && msg.rawContent" class="message-url">
+                  <a :href="msg.rawContent" target="_blank" rel="noopener" @click.stop>{{ msg.rawContent }}</a>
+                </p>
+                <p class="message-content">{{ msg.normalizedContent || msg.rawContent || '' }}</p>
+              </div>
+              <a-button
+                v-if="getContentLength(msg) > 200"
+                type="link"
+                size="small"
+                class="expand-btn"
+                @click.stop="toggleExpand(msg.id)"
+              >
+                {{ expandedIds.has(msg.id) ? '收起' : '展开全文' }}
+              </a-button>
             </div>
             <div class="message-card-footer" v-if="msg.status === 'received' || msg.status === 'failed'">
-              <a-button
+              <a-popconfirm
                 v-if="msg.status === 'received'"
-                size="small"
-                type="link"
-                @click="handleProcess(msg.id)"
-              >处理</a-button>
-              <a-button
+                title="确定要处理这条消息吗？"
+                ok-text="确定"
+                cancel-text="取消"
+                @confirm="handleProcess(msg.id)"
+              >
+                <a-button size="small" type="link">
+                  <template #icon><ThunderboltOutlined /></template>
+                  处理
+                </a-button>
+              </a-popconfirm>
+              <a-popconfirm
                 v-if="msg.status === 'failed'"
-                size="small"
-                type="link"
-                danger
-                @click="handleRetry(msg.id)"
-              >重试</a-button>
+                title="确定要重试这条消息吗？"
+                ok-text="确定"
+                cancel-text="取消"
+                @confirm="handleRetry(msg.id)"
+              >
+                <a-button size="small" type="link" danger>
+                  <template #icon><RedoOutlined /></template>
+                  重试
+                </a-button>
+              </a-popconfirm>
             </div>
           </div>
         </div>
@@ -115,7 +165,12 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
-import { ReloadOutlined } from '@ant-design/icons-vue'
+import {
+  ReloadOutlined,
+  EditOutlined,
+  ThunderboltOutlined,
+  RedoOutlined,
+} from '@ant-design/icons-vue'
 import { getInboxMessages, processMessage, retryMessage } from '@/api/inbox'
 
 const loading = ref(false)
@@ -123,6 +178,8 @@ const messages = ref([])
 const total = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(20)
+const keyword = ref('')
+const expandedIds = ref(new Set())
 
 const filters = reactive({
   sourceType: undefined,
@@ -134,12 +191,13 @@ const fetchMessages = async () => {
   loading.value = true
   try {
     const params = {
-      page: currentPage.value - 1, // 后端从0开始
+      page: currentPage.value - 1,
       size: pageSize.value,
     }
     if (filters.sourceType) params.sourceType = filters.sourceType
     if (filters.status) params.status = filters.status
     if (filters.contentType) params.contentType = filters.contentType
+    if (keyword.value.trim()) params.keyword = keyword.value.trim()
 
     const res = await getInboxMessages(params)
     const { data, errorCode } = res.data
@@ -160,6 +218,11 @@ const refreshList = () => {
   fetchMessages()
 }
 
+const handleSearch = () => {
+  currentPage.value = 1
+  fetchMessages()
+}
+
 const handleFilterChange = () => {
   currentPage.value = 1
   fetchMessages()
@@ -169,6 +232,20 @@ const handlePageChange = (page, size) => {
   currentPage.value = page
   pageSize.value = size
   fetchMessages()
+}
+
+const toggleExpand = (id) => {
+  const newSet = new Set(expandedIds.value)
+  if (newSet.has(id)) {
+    newSet.delete(id)
+  } else {
+    newSet.add(id)
+  }
+  expandedIds.value = newSet
+}
+
+const getContentLength = (msg) => {
+  return (msg.normalizedContent || msg.rawContent || '').length
 }
 
 const handleProcess = async (id) => {
@@ -201,6 +278,11 @@ const sourceTypeLabel = (type) => {
   return labels[type] || type || '未知'
 }
 
+const contentTypeLabel = (type) => {
+  const labels = { text: '文本', url: '链接', image: '图片', audio: '音频', file: '文件' }
+  return labels[type] || type || '未知'
+}
+
 const statusColor = (status) => {
   const colors = { received: 'blue', processing: 'orange', parsed: 'cyan', archived: 'green', synced: 'green', failed: 'red' }
   return colors[status] || 'default'
@@ -220,11 +302,6 @@ const formatTime = (timestamp) => {
   if (diffMs < 3600000) return Math.floor(diffMs / 60000) + '分钟前'
   if (diffMs < 86400000) return Math.floor(diffMs / 3600000) + '小时前'
   return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-}
-
-const displayContent = (msg) => {
-  const content = msg.normalizedContent || msg.rawContent || ''
-  return content.length > 200 ? content.substring(0, 200) + '...' : content
 }
 
 onMounted(() => {
@@ -258,8 +335,21 @@ onMounted(() => {
   border-radius: 6px;
 }
 
+.inbox-stats {
+  margin-bottom: 12px;
+}
+
+.stats-text {
+  color: #999;
+  font-size: 13px;
+}
+
 .inbox-list {
   min-height: 200px;
+}
+
+.inbox-empty {
+  padding: 40px 0;
 }
 
 .message-cards {
@@ -294,11 +384,45 @@ onMounted(() => {
 .message-meta {
   display: flex;
   gap: 4px;
+  flex-wrap: wrap;
 }
 
 .message-time {
   color: #999;
   font-size: 13px;
+  white-space: nowrap;
+}
+
+.message-card-body {
+  cursor: pointer;
+}
+
+.message-content-wrap {
+  overflow: hidden;
+  position: relative;
+}
+
+.message-content-wrap.content-collapsed {
+  max-height: 100px;
+}
+
+.message-content-wrap.content-collapsed::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 30px;
+  background: linear-gradient(transparent, #fff);
+}
+
+.message-url {
+  margin: 0 0 4px 0;
+}
+
+.message-url a {
+  color: #1890ff;
+  word-break: break-all;
 }
 
 .message-content {
@@ -309,9 +433,18 @@ onMounted(() => {
   white-space: pre-wrap;
 }
 
+.expand-btn {
+  padding: 0;
+  height: auto;
+  font-size: 12px;
+}
+
 .message-card-footer {
   margin-top: 8px;
   text-align: right;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .inbox-pagination {

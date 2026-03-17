@@ -152,4 +152,20 @@ public class InputController {
       @RequestHeader("Authorization") String header) {
     return inputMessageService.deleteMessage(id, header);
   }
+
+  @Operation(summary = "同步状态统计", description = "按同步状态分组统计当前用户有同步目标的消息数量")
+  @RequestMapping(value = "/messages/sync-stats", method = RequestMethod.GET)
+  public JsonResult<?> getSyncStats(@RequestHeader("Authorization") String header) {
+    return inputMessageService.getSyncStats(header);
+  }
+
+  @Operation(summary = "同步消息列表", description = "分页查询当前用户有同步目标的消息，支持按同步状态筛选")
+  @RequestMapping(value = "/messages/sync-list", method = RequestMethod.GET)
+  public JsonResult<?> listSyncMessages(
+      @RequestParam(value = "syncStatus", required = false) String syncStatus,
+      @RequestParam(value = "page", required = false) Integer page,
+      @RequestParam(value = "size", required = false) Integer size,
+      @RequestHeader("Authorization") String header) {
+    return inputMessageService.listSyncMessages(syncStatus, page, size, header);
+  }
 }

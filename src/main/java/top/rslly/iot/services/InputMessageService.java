@@ -57,4 +57,10 @@ public interface InputMessageService {
 
   /** 删除消息（仅所有者可操作） */
   JsonResult<?> deleteMessage(long id, String token);
+
+  /** 同步状态统计：按同步状态分组统计 */
+  JsonResult<?> getSyncStats(String token);
+
+  /** 同步消息列表：查询有同步目标的消息，支持按同步状态筛选 */
+  JsonResult<?> listSyncMessages(String syncStatus, Integer page, Integer size, String token);
 }

@@ -53,6 +53,16 @@ export default [
         },
       },
       {
+        path: '/syncStatus',
+        name: 'syncStatus',
+        component: () => import('@/views/syncStatus/index.vue'),
+        meta: {
+          title: 'syncStatus',
+          auth: ['[ROLE_admin]', '[ROLE_guest]', '[ROLE_wx_user]'],
+          domain: 'hub',
+        },
+      },
+      {
         path: '/messageDetail/:id',
         name: 'messageDetail',
         component: () => import('@/views/messageDetail/index.vue'),

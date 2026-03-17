@@ -1192,4 +1192,58 @@ public class InputMessageServiceImpl implements InputMessageService {
     log.info("Message deleted: id={}, createdBy={}", id, username);
     return ResultTool.success();
   }
+
+  @Override
+  public JsonResult<?> getSyncStats(String token) {
+    String username;
+    try {
+      username = resolveUsername(token);
+    } catch (Exception e) {
+      log.warn("get sync stats failed to parse token", e);
+      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
+    }
+
+    JSONObject data = new JSONObject();
+
+    // 按同步状态分组
+    List<Object[]> syncStatusCounts = inputMessageRepository.countBySyncStatusGrouped(username);
+    JSONObject bySyncStatus = new JSONObject();
+    long totalSyncable = 0;
+    for (Object[] row : syncStatusCounts) {
+      String statusKey = (String) row[0];
+      Long count = (Long) row[1];
+      bySyncStatus.put(statusKey != null ? statusKey : "unknown", count);
+      totalSyncable += count;
+    }
+    data.put("bySyncStatus", bySyncStatus);
+    data.put("totalSyncable", totalSyncable);
+
+    return ResultTool.success(data);
+  }
+
+  @Override
+  public JsonResult<?> listSyncMessages(String syncStatus, Integer page, Integer size, String token) {
+    String username;
+    try {
+      username = resolveUsername(token);
+    } catch (Exception e) {
+      log.warn("list sync messages failed to parse token", e);
+      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
+    }
+
+    int pageNum = (page != null && page >= 0) ? page : 0;
+    int pageSize = (size != null && size > 0 && size <= 100) ? size : 20;
+    String sts = (syncStatus != null && !syncStatus.isBlank()) ? syncStatus.trim() : null;
+
+    Page<InputMessageEntity> result = inputMessageRepository.findSyncMessages(
+        username, sts, PageRequest.of(pageNum, pageSize));
+
+    JSONObject data = new JSONObject();
+    data.put("content", result.getContent());
+    data.put("totalElements", result.getTotalElements());
+    data.put("totalPages", result.getTotalPages());
+    data.put("page", result.getNumber());
+    data.put("size", result.getSize());
+    return ResultTool.success(data);
+  }
 }

@@ -87,6 +87,7 @@ const hubCore = {
   inbox: '消息收件箱',
   quickNote: '快速速记',
   archive: '知识归档',
+  syncStatus: '同步状态',
   messageDetail: '消息详情',
 }
 const deviceData = {

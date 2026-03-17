@@ -113,6 +113,7 @@ const domainCards = computed(() => [
       { label: '消息收件箱', path: '/inbox' },
       { label: '快速速记', path: '/quickNote' },
       { label: '知识归档', path: '/archive' },
+      { label: '同步状态', path: '/syncStatus' },
     ],
   },
   {

@@ -114,4 +114,26 @@ public interface InputMessageRepository extends JpaRepository<InputMessageEntity
       group by e.sourceType
       """)
   List<Object[]> countBySourceTypeGrouped(@Param("createdBy") String createdBy);
+
+  /** 按创建者统计各同步状态消息数量 */
+  @Query("""
+      select e.syncStatus, count(e) from InputMessageEntity e
+      where e.createdBy = :createdBy
+        and e.syncTargets is not null and e.syncTargets <> ''
+      group by e.syncStatus
+      """)
+  List<Object[]> countBySyncStatusGrouped(@Param("createdBy") String createdBy);
+
+  /** 按创建者查询需要同步的消息列表（有 syncTargets 的），按同步时间倒序 */
+  @Query("""
+      select e from InputMessageEntity e
+      where e.createdBy = :createdBy
+        and e.syncTargets is not null and e.syncTargets <> ''
+        and (:syncStatus is null or e.syncStatus = :syncStatus)
+      order by coalesce(e.syncedAt, e.receivedAt) desc
+      """)
+  Page<InputMessageEntity> findSyncMessages(
+      @Param("createdBy") String createdBy,
+      @Param("syncStatus") String syncStatus,
+      Pageable pageable);
 }

@@ -417,4 +417,61 @@ onMounted(() => {
   margin-top: 20px;
   text-align: center;
 }
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .archive-container {
+    padding: 12px;
+  }
+
+  .archive-header h2 {
+    font-size: 17px;
+  }
+
+  .archive-search {
+    padding: 10px 12px;
+  }
+
+  .archive-search :deep(.ant-input-search),
+  .archive-search :deep(.ant-select) {
+    width: 100% !important;
+    min-width: 0;
+  }
+
+  .archive-card {
+    padding: 12px;
+  }
+
+  .archive-card-header {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .archive-meta :deep(.ant-tag) {
+    font-size: 11px;
+    padding: 0 4px;
+    margin-inline-end: 2px;
+  }
+
+  .archive-card-footer {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .archive-pagination :deep(.ant-pagination-options) {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .archive-container {
+    padding: 8px;
+  }
+
+  .archive-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+}
 </style>

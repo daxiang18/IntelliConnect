@@ -302,4 +302,47 @@ onMounted(() => {
 .note-actions {
   flex-shrink: 0;
 }
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .quicknote-container {
+    padding: 12px;
+  }
+
+  .quicknote-header h2 {
+    font-size: 17px;
+  }
+
+  .quicknote-input {
+    padding: 12px;
+  }
+
+  .quicknote-toolbar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .recent-note-item {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .note-actions {
+    align-self: flex-end;
+  }
+}
+
+@media (max-width: 480px) {
+  .quicknote-container {
+    padding: 8px;
+  }
+
+  .quicknote-tip {
+    display: none;
+  }
+
+  .save-hint {
+    display: none;
+  }
+}
 </style>

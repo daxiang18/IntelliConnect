@@ -562,11 +562,67 @@ onMounted(() => {
 
 @media (max-width: 768px) {
   .sync-container {
-    padding: 16px;
+    padding: 12px;
+  }
+
+  .sync-header h2 {
+    font-size: 17px;
   }
 
   .stat-value {
     font-size: 22px;
+  }
+
+  .stat-label {
+    font-size: 12px;
+  }
+
+  .sync-card {
+    padding: 12px;
+  }
+
+  .sync-card-header {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .sync-card-meta :deep(.ant-tag) {
+    font-size: 11px;
+    padding: 0 4px;
+    margin-inline-end: 2px;
+  }
+
+  .target-item {
+    gap: 4px;
+  }
+
+  .error-msg {
+    max-width: 200px;
+  }
+
+  .sync-pagination :deep(.ant-pagination-options) {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .sync-container {
+    padding: 8px;
+  }
+
+  .sync-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .stat-value {
+    font-size: 18px;
+  }
+
+  .error-msg {
+    max-width: 150px;
+    font-size: 11px;
   }
 }
 </style>

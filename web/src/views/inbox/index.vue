@@ -757,4 +757,92 @@ onUnmounted(() => {
   margin-top: 20px;
   text-align: center;
 }
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .inbox-container {
+    padding: 12px;
+  }
+
+  .inbox-header h2 {
+    font-size: 17px;
+  }
+
+  .inbox-filters {
+    padding: 10px 12px;
+  }
+
+  .inbox-filters :deep(.ant-space) {
+    gap: 8px !important;
+  }
+
+  .inbox-filters :deep(.ant-input-search),
+  .inbox-filters :deep(.ant-select),
+  .inbox-filters :deep(.ant-picker) {
+    width: 100% !important;
+    min-width: 0;
+  }
+
+  .message-card {
+    padding: 12px;
+  }
+
+  .message-card-header {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .message-meta {
+    gap: 2px;
+  }
+
+  .message-meta :deep(.ant-tag) {
+    font-size: 11px;
+    padding: 0 4px;
+    margin-inline-end: 2px;
+  }
+
+  .message-header-right {
+    margin-left: auto;
+  }
+
+  .batch-bar {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 12px;
+  }
+
+  .batch-count {
+    font-size: 13px;
+  }
+
+  .inbox-pagination :deep(.ant-pagination) {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .inbox-pagination :deep(.ant-pagination-options) {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .inbox-container {
+    padding: 8px;
+  }
+
+  .inbox-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .message-content {
+    font-size: 14px;
+  }
+
+  .message-card-footer {
+    flex-wrap: wrap;
+  }
+}
 </style>

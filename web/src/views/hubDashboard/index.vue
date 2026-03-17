@@ -452,11 +452,88 @@ onMounted(() => {
 
 /* 响应式 */
 @media (max-width: 768px) {
+  .hub-dashboard {
+    padding: 12px;
+  }
+
+  .dashboard-header h2 {
+    font-size: 18px;
+  }
+
   .stat-cards {
     grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
   }
+
+  .stat-card {
+    padding: 12px;
+  }
+
+  .stat-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .stat-value {
+    font-size: 20px;
+  }
+
   .quick-links {
     grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  .quick-link-card {
+    padding: 14px;
+  }
+
+  .recent-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .recent-item-right {
+    align-self: flex-end;
+  }
+}
+
+@media (max-width: 480px) {
+  .hub-dashboard {
+    padding: 8px;
+  }
+
+  .stat-cards {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .stat-card {
+    padding: 10px;
+    gap: 8px;
+  }
+
+  .stat-icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  .stat-value {
+    font-size: 18px;
+  }
+
+  .stat-label {
+    font-size: 12px;
+  }
+
+  .quick-links {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .quick-link-card {
+    padding: 12px;
+    gap: 6px;
   }
 }
 </style>

@@ -42,7 +42,7 @@ import java.util.concurrent.*;
 @Component
 public class AiContentAnalyzer {
 
-  @Value("${ai.classifierTool-llm:silicon-Qwen/Qwen3-Next-80B-A3B-Instruct}")
+  @Value("${ai.classifierTool-llm:dashscope-qwen-max}")
   private String llmName;
 
   /** AI 分析超时（秒），默认 30 秒 */
@@ -142,6 +142,7 @@ public class AiContentAnalyzer {
       LLM llm = LLMFactory.getLLM(llmName);
       List<ModelMessage> messages = new ArrayList<>();
       messages.add(new ModelMessage("system", SYSTEM_PROMPT));
+      messages.add(new ModelMessage("user", userPrompt));
 
       // 使用带超时的方式调用
       ExecutorService executor = Executors.newSingleThreadExecutor();

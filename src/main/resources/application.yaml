@@ -172,41 +172,41 @@ ai:
   audio-tmp-path: D://temp-music//
   audio-temp-url: https://XXX.com
   vision-explain-url: http://127.0.0.1:8080/api/v2/vision/explain
-  vision-model: silicon-Qwen/Qwen3-VL-8B-Instruct
+  vision-model: dashscope-qwen-vl-plus
   glm-key: XXX
   deepSeek-key: XXX
   siliconFlow-Key: sk-dmsxtfzmrgqvqiypyvoeftzpsfbhnxrzqipjhndvfmdhhelu
   uniApi-Key: XXX
-  dashscope-key: XXX
+  dashscope-key: sk-ce458d25514a407bae8f1c7f482ad1ea
   robot-name: 小创
   team-name: 创万联
   custom-key: XXX
   custom-llm-provider-url: XXX
   agent-epoch-limit: 5
-  chatTool-llm: silicon-Qwen/Qwen3-32B
+  chatTool-llm: dashscope-qwen-plus
   chatTool-speedUp: true
-  emotionTool-llm: silicon-Qwen/Qwen3-30B-A3B-think-no
-  memoryTool-llm: silicon-Qwen/Qwen2.5-32B-Instruct
-  classifierTool-llm: silicon-Qwen/Qwen3-Next-80B-A3B-Instruct
+  emotionTool-llm: dashscope-qwen-plus
+  memoryTool-llm: dashscope-qwen-plus
+  classifierTool-llm: dashscope-qwen-max
   classifierTool-speedUp: true
-  controlTool-llm: silicon-Qwen/Qwen3-Next-80B-A3B-Instruct
-  musicTool-llm: silicon-Qwen/Qwen2.5-14B-Instruct
-  productRoleTool-llm: silicon-Qwen/Qwen2.5-7B-Instruct
-  weatherTool-llm: silicon-Qwen/Qwen3-30B-A3B
+  controlTool-llm: dashscope-qwen-max
+  musicTool-llm: dashscope-qwen-turbo
+  productRoleTool-llm: dashscope-qwen-turbo
+  weatherTool-llm: dashscope-qwen-plus
   weatherTool-speedUp: true
-  wxBoundProductTool-llm: silicon-Qwen/Qwen2.5-14B-Instruct
-  wxProductActiveTool-llm: silicon-Qwen/Qwen2.5-14B-Instruct
-  scheduleTool-llm: silicon-Qwen/Qwen3-30B-A3B-think-128
-  searchTool-llm: silicon-Qwen/Qwen2.5-14B-Instruct
-  agent-llm: silicon-Qwen/Qwen3-235B-A22B-Instruct-2507
+  wxBoundProductTool-llm: dashscope-qwen-turbo
+  wxProductActiveTool-llm: dashscope-qwen-turbo
+  scheduleTool-llm: dashscope-qwen-plus
+  searchTool-llm: dashscope-qwen-turbo
+  agent-llm: dashscope-qwen-max
   agent-speedUp: true
-  longMemoryTool-llm: silicon-Qwen/Qwen2.5-14B-Instruct
+  longMemoryTool-llm: dashscope-qwen-turbo
   wx_smart_robot_llm: glm
-  knowledge_graphic_llm: silicon-Qwen/Qwen3-Next-80B-A3B-Instruct
+  knowledge_graphic_llm: dashscope-qwen-max
   knowledge_graphic:
     max_graphic_length: 30000
   mcp:
-    agent-llm: silicon-Qwen/Qwen3-235B-A22B-Instruct-2507
+    agent-llm: dashscope-qwen-max
     agent-speedUp: true
     agent-epoch-limit: 5
 jwt:

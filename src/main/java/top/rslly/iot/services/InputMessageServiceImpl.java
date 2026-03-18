@@ -692,7 +692,15 @@ public class InputMessageServiceImpl implements InputMessageService {
             finalTags = aiResult.tags().isEmpty() ? autoTagResult.tags() : aiResult.tags();
             aiSummary = aiResult.summary();
             if (aiResult.todos() != null && !aiResult.todos().isEmpty()) {
-              todosJson = JSON.toJSONString(aiResult.todos());
+              // fastjson 1.x 无法序列化 Java record 类型（会输出 {}），需手动构建 JSON
+              com.alibaba.fastjson.JSONArray todosArr = new com.alibaba.fastjson.JSONArray();
+              for (AiContentAnalyzer.TodoItem t : aiResult.todos()) {
+                com.alibaba.fastjson.JSONObject obj = new com.alibaba.fastjson.JSONObject();
+                obj.put("content", t.content());
+                obj.put("priority", t.priority());
+                todosArr.add(obj);
+              }
+              todosJson = todosArr.toJSONString();
             }
             if (aiResult.entities() != null && !aiResult.entities().isEmpty()) {
               entitiesJson = JSON.toJSONString(aiResult.entities());
@@ -724,9 +732,7 @@ public class InputMessageServiceImpl implements InputMessageService {
         // G3: 将 AI 提取的待办写入独立的 TodoItem 表
         if (todosJson != null) {
           try {
-            AiContentAnalyzer.AnalysisResult aiResultForTodos =
-                aiContentAnalyzer.analyze(contentType, rawContent, contentToIngest);
-            // 使用之前已解析的 aiResult 中的 todos（避免重复调用 LLM）
+            // todosJson 已由上面的 aiResult 手动序列化，直接解析即可
             com.alibaba.fastjson.JSONArray todosArray = JSON.parseArray(todosJson);
             if (todosArray != null) {
               // 先清除旧的待办（重处理场景）

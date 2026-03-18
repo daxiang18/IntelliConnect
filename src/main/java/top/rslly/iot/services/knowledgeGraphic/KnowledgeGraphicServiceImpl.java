@@ -670,4 +670,57 @@ public class KnowledgeGraphicServiceImpl implements KnowledgeGraphicService {
         knowledgeGraphicAttributeRepository.findByBelong(belong);
     return ResultTool.success(attributes);
   }
+
+  /**
+   * G4: 从消息 AI 分析结果中自动将提取的实体关联到知识图谱。
+   * - 每个实体创建/更新为一个图谱节点
+   * - 同一消息中的实体之间建立"共现"关系
+   * - 使用固定 productId=0 表示个人中枢知识图谱空间
+   *
+   * @param entities  AI 提取的实体名称列表（最多 5 个）
+   * @param messageId 来源消息 ID
+   * @param summary   消息摘要（作为节点描述补充）
+   */
+  public void autoLinkFromMessage(List<String> entities, long messageId, String summary) {
+    if (entities == null || entities.isEmpty()) {
+      return;
+    }
+
+    int hubProductId = 0; // 个人中枢专用 productId
+    String description = summary != null ? summary : "来自消息 #" + messageId;
+
+    // 限制每条消息最多 5 个实体
+    List<String> limited = entities.size() > 5 ? entities.subList(0, 5) : entities;
+
+    // 1. 为每个实体创建/更新节点
+    List<Long> nodeIds = new java.util.ArrayList<>();
+    List<String> nodeNames = new java.util.ArrayList<>();
+    for (String entityName : limited) {
+      if (entityName == null || entityName.isBlank()) continue;
+      String trimmed = entityName.trim();
+      try {
+        JsonResult<?> result = this.addNode(trimmed, description, hubProductId);
+        if (result.getSuccess() && result.getData() instanceof KnowledgeGraphicNodeEntity node) {
+          nodeIds.add(node.getId());
+          nodeNames.add(trimmed);
+        }
+      } catch (Exception e) {
+        log.warn("autoLinkFromMessage: failed to add node '{}', messageId={}", trimmed, messageId, e);
+      }
+    }
+
+    // 2. 建立实体间的共现关系
+    if (nodeIds.size() >= 2) {
+      for (int i = 0; i < nodeIds.size(); i++) {
+        for (int j = i + 1; j < nodeIds.size(); j++) {
+          try {
+            this.addRelation("共现于消息#" + messageId, nodeIds.get(i), nodeIds.get(j));
+          } catch (Exception e) {
+            log.warn("autoLinkFromMessage: failed to add relation {}-{}, messageId={}",
+                nodeNames.get(i), nodeNames.get(j), messageId, e);
+          }
+        }
+      }
+    }
+  }
 }

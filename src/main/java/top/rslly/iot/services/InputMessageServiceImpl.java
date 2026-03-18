@@ -46,6 +46,7 @@ import top.rslly.iot.param.response.InputMessageResponse;
 import top.rslly.iot.services.agent.AgentLongMemoryServiceImpl;
 import top.rslly.iot.services.agent.AiService;
 import top.rslly.iot.utility.input.InputContentAutoTagger;
+import top.rslly.iot.utility.input.AiContentAnalyzer;
 import top.rslly.iot.utility.JwtTokenUtil;
 import top.rslly.iot.utility.ai.rag.RagUtility;
 import top.rslly.iot.utility.ai.voice.ASR.AsrServiceFactory;
@@ -53,11 +54,15 @@ import top.rslly.iot.utility.input.UrlContentNormalizer;
 import top.rslly.iot.utility.result.JsonResult;
 import top.rslly.iot.utility.result.ResultCode;
 import top.rslly.iot.utility.result.ResultTool;
+import top.rslly.iot.dao.TodoItemRepository;
+import top.rslly.iot.models.TodoItemEntity;
+import top.rslly.iot.services.knowledgeGraphic.KnowledgeGraphicServiceImpl;
 
 import jakarta.annotation.Resource;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -81,6 +86,7 @@ public class InputMessageServiceImpl implements InputMessageService {
   private static final String CONTENT_TYPE_VOICE = "voice";
   private static final String CONTENT_TYPE_URL = "url";
   private static final String SYNC_TARGET_FEISHU = "feishu";
+  private static final String SYNC_TARGET_GITHUB = "github";
   private static final String SYNC_STATUS_NOT_REQUESTED = "not_requested";
   private static final String SYNC_STATUS_PENDING = "pending";
   private static final String SYNC_STATUS_SYNCED = "synced";
@@ -97,7 +103,7 @@ public class InputMessageServiceImpl implements InputMessageService {
   private static final String WECHAT_VOICE_MIME_TYPE = "audio/amr";
   private static final String IMAGE_SEARCH_PROMPT =
       "请提取这张图片里对检索最有帮助的信息，包括可见文字、主要物体、场景和关键线索，使用简洁中文输出。";
-  private static final Set<String> SUPPORTED_SYNC_TARGETS = Set.of(SYNC_TARGET_FEISHU);
+  private static final Set<String> SUPPORTED_SYNC_TARGETS = Set.of(SYNC_TARGET_FEISHU, SYNC_TARGET_GITHUB);
 
   @Resource
   private InputMessageRepository inputMessageRepository;
@@ -118,10 +124,18 @@ public class InputMessageServiceImpl implements InputMessageService {
   private InputContentAutoTagger inputContentAutoTagger;
   @Autowired(required = false)
   private FeishuSyncService feishuSyncService;
+  @Autowired(required = false)
+  private GithubSyncService githubSyncService;
   @Autowired
   private AsrServiceFactory asrServiceFactory;
   @Autowired
   private Validator validator;
+  @Autowired
+  private AiContentAnalyzer aiContentAnalyzer;
+  @Resource
+  private TodoItemRepository todoItemRepository;
+  @Autowired(required = false)
+  private KnowledgeGraphicServiceImpl knowledgeGraphicService;
 
   private String resolveUsername(String token) {
     String tokenDeal = token.replace(JwtTokenUtil.TOKEN_PREFIX, "");
@@ -497,6 +511,9 @@ public class InputMessageServiceImpl implements InputMessageService {
     response.setTags(tags);
     response.setProcessingAttemptCount(entity.getProcessingAttemptCount());
     response.setDocumentPurpose(entity.getDocumentPurpose());
+    response.setAiSummary(entity.getAiSummary());
+    response.setTodosJson(entity.getTodosJson());
+    response.setEntitiesJson(entity.getEntitiesJson());
     return response;
   }
 
@@ -588,6 +605,14 @@ public class InputMessageServiceImpl implements InputMessageService {
     log.info("input message created, id={}, dedupeKey={}, sessionId={}, contentType={}, syncTargets={}, user={}",
         savedEntity.getId(), savedEntity.getDedupeKey(), savedEntity.getSessionId(), savedEntity.getContentType(),
         savedEntity.getSyncTargets(), username);
+
+    // G2: 自动处理 — autoProcess 默认为 true，创建后自动触发处理流水线
+    Boolean autoProcess = inputMessageCreateParam.getAutoProcess();
+    if (autoProcess == null || autoProcess) {
+      log.info("Auto-processing message: id={}, dedupeKey={}, user={}", savedEntity.getId(), savedEntity.getDedupeKey(), username);
+      processMessageForUsername(savedEntity.getId(), username);
+    }
+
     return ResultTool.success(savedEntity);
   }
 
@@ -653,20 +678,84 @@ public class InputMessageServiceImpl implements InputMessageService {
         InputContentAutoTagger.AutoTagResult autoTagResult =
             resolveAutoTagResult(contentType, rawContent, contentToIngest);
 
-        // Persist updated category/tags after content enrichment
+        // G3: AI 智能分析 — 尝试 LLM 分析，失败时降级为规则分类结果
+        String finalCategory = autoTagResult.category();
+        List<String> finalTags = autoTagResult.tags();
+        String aiSummary = null;
+        String todosJson = null;
+        String entitiesJson = null;
+        try {
+          AiContentAnalyzer.AnalysisResult aiResult =
+              aiContentAnalyzer.analyze(contentType, rawContent, contentToIngest);
+          if (aiResult != null && aiResult.fromAi()) {
+            finalCategory = aiResult.category();
+            finalTags = aiResult.tags().isEmpty() ? autoTagResult.tags() : aiResult.tags();
+            aiSummary = aiResult.summary();
+            if (aiResult.todos() != null && !aiResult.todos().isEmpty()) {
+              todosJson = JSON.toJSONString(aiResult.todos());
+            }
+            if (aiResult.entities() != null && !aiResult.entities().isEmpty()) {
+              entitiesJson = JSON.toJSONString(aiResult.entities());
+            }
+            log.info("AI analysis succeeded: id={}, category={}, tags={}, todosCount={}, entitiesCount={}",
+                id, aiResult.category(), aiResult.tags().size(),
+                aiResult.todos() != null ? aiResult.todos().size() : 0,
+                aiResult.entities() != null ? aiResult.entities().size() : 0);
+          }
+        } catch (Exception aiEx) {
+          log.warn("AI analysis exception, falling back to rules: id={}, error={}", id, aiEx.getMessage());
+        }
+
+        // Persist updated category/tags/AI results after content enrichment
+        final String persistCategory = finalCategory;
+        final String persistTags = String.join(",", finalTags);
+        final String persistAiSummary = aiSummary;
+        final String persistTodosJson = todosJson;
+        final String persistEntitiesJson = entitiesJson;
         inputMessageRepository.findById(id).ifPresent(freshEntity -> {
-          freshEntity.setContentCategory(autoTagResult.category());
-          freshEntity.setContentTags(String.join(",", autoTagResult.tags()));
+          freshEntity.setContentCategory(persistCategory);
+          freshEntity.setContentTags(persistTags);
+          freshEntity.setAiSummary(persistAiSummary);
+          freshEntity.setTodosJson(persistTodosJson);
+          freshEntity.setEntitiesJson(persistEntitiesJson);
           inputMessageRepository.save(freshEntity);
         });
+
+        // G3: 将 AI 提取的待办写入独立的 TodoItem 表
+        if (todosJson != null) {
+          try {
+            AiContentAnalyzer.AnalysisResult aiResultForTodos =
+                aiContentAnalyzer.analyze(contentType, rawContent, contentToIngest);
+            // 使用之前已解析的 aiResult 中的 todos（避免重复调用 LLM）
+            com.alibaba.fastjson.JSONArray todosArray = JSON.parseArray(todosJson);
+            if (todosArray != null) {
+              // 先清除旧的待办（重处理场景）
+              todoItemRepository.deleteAllByMessageId(id);
+              for (int i = 0; i < todosArray.size(); i++) {
+                com.alibaba.fastjson.JSONObject todoObj = todosArray.getJSONObject(i);
+                TodoItemEntity todoItem = new TodoItemEntity();
+                todoItem.setMessageId(id);
+                todoItem.setContent(todoObj.getString("content"));
+                todoItem.setPriority(todoObj.getString("priority"));
+                todoItem.setStatus("pending");
+                todoItem.setCreatedBy(createdBy);
+                todoItem.setCreatedAt(System.currentTimeMillis());
+                todoItemRepository.save(todoItem);
+              }
+              log.info("Todos persisted: messageId={}, count={}", id, todosArray.size());
+            }
+          } catch (Exception todoEx) {
+            log.warn("Failed to persist todos: messageId={}, error={}", id, todoEx.getMessage());
+          }
+        }
 
         Map<String, String> metadata = new HashMap<>();
         metadata.put("sessionId", sessionId);
         metadata.put("dedupeKey", dedupeKey);
         metadata.put("createdBy", createdBy);
         metadata.put("contentType", contentType == null ? CONTENT_TYPE_TEXT : contentType);
-        metadata.put("contentCategory", autoTagResult.category());
-        metadata.put("contentTags", String.join(",", autoTagResult.tags()));
+        metadata.put("contentCategory", persistCategory);
+        metadata.put("contentTags", persistTags);
         metadata.put("documentType", "personal_input");
         if (entity.getDocumentPurpose() != null && !entity.getDocumentPurpose().isBlank()) {
           metadata.put("documentPurpose", entity.getDocumentPurpose());
@@ -677,6 +766,12 @@ public class InputMessageServiceImpl implements InputMessageService {
         metadata.put("syncStatus", resolveSyncStatus(entity.getSyncTargets(), entity.getSyncStatus()));
         if (isUrlContentType(contentType) && rawContent != null && !rawContent.isBlank()) {
           metadata.put("sourceUrl", rawContent);
+        }
+        // G1.4: 重处理前先清理可能存在的旧向量，避免重复
+        try {
+          RagUtility.deleteByDedupeKey(knowledgeChatEmbeddingStore, dedupeKey);
+        } catch (Exception cleanupEx) {
+          log.warn("Failed to clean old vectors before re-ingest: id={}, dedupeKey={}", id, dedupeKey, cleanupEx);
         }
         RagUtility.ingestTextToChroma(contentToIngest, metadata, embeddingModel,
             knowledgeChatEmbeddingStore);
@@ -698,6 +793,35 @@ public class InputMessageServiceImpl implements InputMessageService {
                 resolveExceptionMessage(syncException), syncException);
             updateTargetSyncState(id, SYNC_TARGET_FEISHU, SYNC_STATUS_FAILED, null,
                 buildTargetSyncFailureReference(syncException));
+          }
+        }
+        // G5: GitHub 同步
+        if (githubSyncService != null && shouldSyncToTarget(entity.getSyncTargets(), SYNC_TARGET_GITHUB)) {
+          try {
+            log.info("input message GitHub sync starting, id={}, dedupeKey={}", id, dedupeKey);
+            GithubSyncService.GithubSyncResult githubSyncResult =
+                githubSyncService.syncMessage(entity, contentToIngest);
+            updateTargetSyncState(id, SYNC_TARGET_GITHUB, SYNC_STATUS_SYNCED, githubSyncResult.syncedAt(),
+                githubSyncResult.reference());
+            log.info("input message GitHub sync succeeded, id={}, dedupeKey={}, filePath={}",
+                id, dedupeKey, githubSyncResult.reference().get("filePath"));
+          } catch (RuntimeException syncException) {
+            log.error("input message GitHub sync failed, id={}, dedupeKey={}, error={}",
+                id, dedupeKey, resolveExceptionMessage(syncException), syncException);
+            updateTargetSyncState(id, SYNC_TARGET_GITHUB, SYNC_STATUS_FAILED, null,
+                buildTargetSyncFailureReference(syncException));
+          }
+        }
+        // G4: 知识图谱自动关联 — 将 AI 提取的实体写入图谱
+        if (knowledgeGraphicService != null && persistEntitiesJson != null) {
+          try {
+            List<String> entityNames = JSON.parseArray(persistEntitiesJson, String.class);
+            if (entityNames != null && !entityNames.isEmpty()) {
+              knowledgeGraphicService.autoLinkFromMessage(entityNames, id, persistAiSummary);
+              log.info("Knowledge graph auto-linked: messageId={}, entitiesCount={}", id, entityNames.size());
+            }
+          } catch (Exception kgEx) {
+            log.warn("Knowledge graph auto-link failed: messageId={}, error={}", id, kgEx.getMessage());
           }
         }
         updateStatusIfAttemptMatches(id, STATUS_INGESTED, attemptToken);
@@ -742,6 +866,7 @@ public class InputMessageServiceImpl implements InputMessageService {
     inputMessageCreateParam.setRawContent(url);
     inputMessageCreateParam.setNormalizedContent(UrlContentNormalizer.buildLinkSummary(title, description, url));
     inputMessageCreateParam.setDedupeKey(buildWechatDedupeKey(appid, openid, externalMessageId));
+    inputMessageCreateParam.setAutoProcess(false); // 微信桥接自行管理处理流程
 
     JsonResult<?> createResult = createMessageForUsername(inputMessageCreateParam, username);
     if (!createResult.getSuccess() || !(createResult.getData() instanceof InputMessageEntity entity)) {
@@ -772,6 +897,7 @@ public class InputMessageServiceImpl implements InputMessageService {
     inputMessageCreateParam.setRawContent(content);
     inputMessageCreateParam.setNormalizedContent(content);
     inputMessageCreateParam.setDedupeKey(buildWechatDedupeKey(appid, openid, externalMessageId));
+    inputMessageCreateParam.setAutoProcess(false); // 微信桥接自行管理处理流程
 
     JsonResult<?> createResult = createMessageForUsername(inputMessageCreateParam, username);
     if (!createResult.getSuccess() || !(createResult.getData() instanceof InputMessageEntity entity)) {
@@ -808,6 +934,7 @@ public class InputMessageServiceImpl implements InputMessageService {
     inputMessageCreateParam.setNormalizedContent(imageUrl);
     inputMessageCreateParam.setAttachments(List.of(attachment));
     inputMessageCreateParam.setDedupeKey(buildWechatDedupeKey(appid, openid, externalMessageId));
+    inputMessageCreateParam.setAutoProcess(false); // 微信桥接自行管理处理流程
 
     JsonResult<?> createResult = createMessageForUsername(inputMessageCreateParam, username);
     if (!createResult.getSuccess() || !(createResult.getData() instanceof InputMessageEntity entity)) {
@@ -846,6 +973,7 @@ public class InputMessageServiceImpl implements InputMessageService {
       inputMessageCreateParam.setAttachments(List.of(attachment));
     }
     inputMessageCreateParam.setDedupeKey(buildWechatDedupeKey(appid, openid, externalMessageId));
+    inputMessageCreateParam.setAutoProcess(false); // 微信桥接自行管理处理流程
 
     JsonResult<?> createResult = createMessageForUsername(inputMessageCreateParam, username);
     if (!createResult.getSuccess() || !(createResult.getData() instanceof InputMessageEntity entity)) {
@@ -1043,9 +1171,9 @@ public class InputMessageServiceImpl implements InputMessageService {
     }
 
     try {
-      EmbeddingSearchResult<TextSegment> searchResult = RagUtility.searchByCreatedByAndSessionId(
+      EmbeddingSearchResult<TextSegment> searchResult = RagUtility.searchByCreatedByAndFilters(
           knowledgeChatEmbeddingStore, embeddingModel, inputMessageRecallParam.getQuery(), username,
-          inputMessageRecallParam.getSessionId(), 5, 0.6);
+          inputMessageRecallParam.getSessionId(), inputMessageRecallParam.getDocumentPurpose(), 5, 0.6);
         List<InputMessageRecallItemResponse> result = searchResult.matches().stream()
           .map(match -> {
             String contentType = match.embedded().metadata().getString("contentType");
@@ -1238,6 +1366,38 @@ public class InputMessageServiceImpl implements InputMessageService {
     msg.setDocumentPurpose(documentPurpose);
     inputMessageRepository.save(msg);
     log.info("Message purpose updated: id={}, documentPurpose={}, createdBy={}", id, documentPurpose, username);
+
+    // G1.3: 如果消息已入库向量，则删除旧向量并重新入库（更新 documentPurpose 元数据）
+    if (STATUS_INGESTED.equals(msg.getStatus()) && msg.getDedupeKey() != null) {
+      try {
+        RagUtility.deleteByDedupeKey(knowledgeChatEmbeddingStore, msg.getDedupeKey());
+
+        String contentToReingest = msg.getNormalizedContent();
+        if (contentToReingest == null || contentToReingest.isBlank()) {
+          contentToReingest = msg.getRawContent();
+        }
+        if (contentToReingest != null && !contentToReingest.isBlank()) {
+          Map<String, String> metadata = new HashMap<>();
+          metadata.put("sessionId", msg.getSessionId() != null ? msg.getSessionId() : "");
+          metadata.put("dedupeKey", msg.getDedupeKey());
+          metadata.put("createdBy", msg.getCreatedBy());
+          metadata.put("contentType", msg.getContentType() != null ? msg.getContentType() : CONTENT_TYPE_TEXT);
+          metadata.put("contentCategory", msg.getContentCategory() != null ? msg.getContentCategory() : "");
+          metadata.put("contentTags", msg.getContentTags() != null ? msg.getContentTags() : "");
+          metadata.put("documentType", "personal_input");
+          metadata.put("documentPurpose", documentPurpose);
+          if (msg.getSyncTargets() != null && !msg.getSyncTargets().isBlank()) {
+            metadata.put("syncTargets", msg.getSyncTargets());
+          }
+          metadata.put("syncStatus", resolveSyncStatus(msg.getSyncTargets(), msg.getSyncStatus()));
+          RagUtility.ingestTextToChroma(contentToReingest, metadata, embeddingModel, knowledgeChatEmbeddingStore);
+          log.info("Vector re-ingested after purpose update: id={}, dedupeKey={}, newPurpose={}", id, msg.getDedupeKey(), documentPurpose);
+        }
+      } catch (Exception e) {
+        log.warn("Failed to update vector for purpose change: id={}, dedupeKey={}", id, msg.getDedupeKey(), e);
+      }
+    }
+
     return ResultTool.success(toResponse(msg));
   }
 
@@ -1259,6 +1419,14 @@ public class InputMessageServiceImpl implements InputMessageService {
     InputMessageEntity msg = optMsg.get();
     if (!username.equals(msg.getCreatedBy())) {
       return ResultTool.fail(ResultCode.NO_PERMISSION);
+    }
+
+    // G1.2: 删除消息时同步清理向量库
+    try {
+      RagUtility.deleteByDedupeKey(knowledgeChatEmbeddingStore, msg.getDedupeKey());
+      log.info("Vector deleted for message: id={}, dedupeKey={}", id, msg.getDedupeKey());
+    } catch (Exception e) {
+      log.warn("Failed to delete vector for message: id={}, dedupeKey={}", id, msg.getDedupeKey(), e);
     }
 
     inputMessageRepository.deleteById(id);
@@ -1380,6 +1548,12 @@ public class InputMessageServiceImpl implements InputMessageService {
       if (opt.isEmpty() || !username.equals(opt.get().getCreatedBy())) {
         skipCount++;
         continue;
+      }
+      // G1.2: 批量删除时同步清理向量库
+      try {
+        RagUtility.deleteByDedupeKey(knowledgeChatEmbeddingStore, opt.get().getDedupeKey());
+      } catch (Exception e) {
+        log.warn("Failed to delete vector for message: id={}, dedupeKey={}", id, opt.get().getDedupeKey(), e);
       }
       inputMessageRepository.deleteById(id);
       deletedCount++;

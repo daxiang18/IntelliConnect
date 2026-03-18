@@ -13,4 +13,7 @@ public class InputMessageRecallParam {
 
   @Size(max = 255, message = "sessionId 长度不能超过 255")
   private String sessionId;
+
+  @Size(max = 50, message = "documentPurpose 长度不能超过 50")
+  private String documentPurpose;
 }

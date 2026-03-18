@@ -124,11 +124,25 @@ public class RagUtility {
   public static EmbeddingSearchResult<TextSegment> searchByCreatedByAndSessionId(
       EmbeddingStore<TextSegment> store, EmbeddingModel embeddingModel,
       String query, String createdBy, String sessionId, int maxResults, double minScore) {
+    return searchByCreatedByAndFilters(store, embeddingModel, query, createdBy, sessionId, null,
+        maxResults, minScore);
+  }
+
+  /**
+   * 按 createdBy + 可选 sessionId + 可选 documentPurpose 过滤检索个人输入向量
+   */
+  public static EmbeddingSearchResult<TextSegment> searchByCreatedByAndFilters(
+      EmbeddingStore<TextSegment> store, EmbeddingModel embeddingModel,
+      String query, String createdBy, String sessionId, String documentPurpose,
+      int maxResults, double minScore) {
     Embedding queryEmbedding = embeddingModel.embed(query).content();
     Filter filter = metadataKey("createdBy").isEqualTo(createdBy)
         .and(metadataKey("documentType").isEqualTo("personal_input"));
     if (sessionId != null && !sessionId.isBlank()) {
       filter = filter.and(metadataKey("sessionId").isEqualTo(sessionId));
+    }
+    if (documentPurpose != null && !documentPurpose.isBlank()) {
+      filter = filter.and(metadataKey("documentPurpose").isEqualTo(documentPurpose));
     }
 
     var searchRequest = EmbeddingSearchRequest.builder()
@@ -152,6 +166,19 @@ public class RagUtility {
         .and(metadataKey("fileName").isEqualTo(fileName));
 
     // 执行批量删除
+    store.removeAll(filter);
+  }
+
+  /**
+   * 按 dedupeKey 删除个人输入消息的嵌入向量
+   * 用于消息删除、重处理、用途修改等场景的向量生命周期管理
+   */
+  public static void deleteByDedupeKey(EmbeddingStore<TextSegment> store, String dedupeKey) {
+    if (dedupeKey == null || dedupeKey.isBlank()) {
+      return;
+    }
+    Filter filter = metadataKey("dedupeKey").isEqualTo(dedupeKey)
+        .and(metadataKey("documentType").isEqualTo("personal_input"));
     store.removeAll(filter);
   }
 

@@ -87,7 +87,7 @@ public interface InputMessageRepository extends JpaRepository<InputMessageEntity
         and (:status is null or e.status = :status)
         and (:contentType is null or e.contentType = :contentType)
         and (:keyword is null or lower(coalesce(e.normalizedContent, e.rawContent, '')) like lower(concat('%', :keyword, '%')))
-        and (:archivedOnly = false or e.status in ('parsed', 'archived', 'synced'))
+        and (:archivedOnly = false or e.status in ('parsed', 'archived', 'synced', 'ingested'))
         and (:startTime is null or e.receivedAt >= :startTime)
         and (:endTime is null or e.receivedAt <= :endTime)
         and (:documentPurpose is null or e.documentPurpose = :documentPurpose)

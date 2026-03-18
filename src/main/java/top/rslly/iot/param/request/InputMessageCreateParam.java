@@ -72,4 +72,11 @@ public class InputMessageCreateParam {
 
   @Size(max = 64, message = "documentPurpose 长度不能超过 64")
   private String documentPurpose;
+
+  /**
+   * 是否在创建后自动触发消息处理（归一化 + 向量入库 + 同步等）。
+   * 默认 true — Web 手动输入自动处理，无需用户手动点击。
+   * 设为 false 时消息停在 received 状态，需要手动触发处理。
+   */
+  private Boolean autoProcess = true;
 }

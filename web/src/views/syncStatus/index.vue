@@ -193,12 +193,7 @@ import {
   CloseCircleOutlined,
   SyncOutlined,
 } from '@ant-design/icons-vue'
-import { retryMessage } from '@/api/inbox'
-import request from '@/utils/request'
-
-// API
-const getSyncStats = () => request({ url: '/api/v2/input/messages/sync-stats', method: 'get' })
-const getSyncMessages = (params) => request({ url: '/api/v2/input/messages/sync-list', method: 'get', params })
+import { retryMessage, getSyncStats, getSyncMessages } from '@/api/inbox'
 
 const statsLoading = ref(false)
 const listLoading = ref(false)

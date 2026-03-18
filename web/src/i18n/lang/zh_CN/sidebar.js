@@ -88,6 +88,7 @@ const hubCore = {
   quickNote: '快速速记',
   archive: '知识归档',
   syncStatus: '同步状态',
+  todoList: '待办事项',
   messageDetail: '消息详情',
 }
 const deviceData = {

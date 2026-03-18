@@ -93,6 +93,73 @@
           </div>
         </div>
 
+        <!-- AI 摘要 -->
+        <div class="detail-section ai-summary-section" v-if="msg.aiSummary">
+          <h3><BulbOutlined /> AI 摘要</h3>
+          <div class="ai-summary-card">
+            <p class="ai-summary-text">{{ msg.aiSummary }}</p>
+          </div>
+        </div>
+
+        <!-- 待办事项（来自数据库） -->
+        <div class="detail-section" v-if="messageTodos.length > 0">
+          <h3><OrderedListOutlined /> 关联待办 ({{ messageTodos.length }})</h3>
+          <div class="todo-items-card">
+            <div
+              v-for="todo in messageTodos"
+              :key="todo.id"
+              class="todo-item-row"
+              :class="{ 'todo-done': todo.status !== 'pending' }"
+            >
+              <div class="todo-item-left">
+                <a-tag :color="todoPriorityColor(todo.priority)" size="small">{{ todoPriorityLabel(todo.priority) }}</a-tag>
+                <a-tag :color="todoStatusColor(todo.status)" size="small">{{ todoStatusLabel(todo.status) }}</a-tag>
+                <span class="todo-item-content" :class="{ 'line-through': todo.status === 'completed' }">{{ todo.content }}</span>
+              </div>
+              <div class="todo-item-actions">
+                <a-button v-if="todo.status === 'pending'" type="link" size="small" @click="handleTodoComplete(todo.id)">
+                  <template #icon><CheckOutlined /></template>
+                </a-button>
+                <a-button v-if="todo.status === 'pending'" type="link" size="small" @click="handleTodoCancel(todo.id)">
+                  <template #icon><CloseOutlined /></template>
+                </a-button>
+                <a-button v-if="todo.status !== 'pending'" type="link" size="small" @click="handleTodoReopen(todo.id)">
+                  <template #icon><UndoOutlined /></template>
+                </a-button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- AI 提取的待办（未入库时回退显示 todosJson） -->
+        <div class="detail-section" v-else-if="parsedTodos.length > 0">
+          <h3><OrderedListOutlined /> AI 提取待办 ({{ parsedTodos.length }})</h3>
+          <div class="todo-items-card">
+            <div v-for="(todo, idx) in parsedTodos" :key="idx" class="todo-item-row">
+              <div class="todo-item-left">
+                <a-tag :color="todoPriorityColor(todo.priority)" size="small">{{ todoPriorityLabel(todo.priority) }}</a-tag>
+                <span class="todo-item-content">{{ todo.content }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- AI 实体 -->
+        <div class="detail-section" v-if="parsedEntities.length > 0">
+          <h3><TagOutlined /> 关联实体</h3>
+          <div class="entity-tags-card">
+            <a-tag
+              v-for="(entity, idx) in parsedEntities"
+              :key="idx"
+              color="processing"
+              class="entity-tag"
+              @click="$router.push('/knowledgeGraphic')"
+            >
+              {{ entity }}
+            </a-tag>
+          </div>
+        </div>
+
         <!-- 原始内容 -->
         <div class="detail-section">
           <h3>原始内容</h3>
@@ -175,7 +242,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
@@ -183,14 +250,91 @@ import {
   ThunderboltOutlined,
   RedoOutlined,
   DeleteOutlined,
+  CheckOutlined,
+  CloseOutlined,
+  UndoOutlined,
+  BulbOutlined,
+  TagOutlined,
+  OrderedListOutlined,
 } from '@ant-design/icons-vue'
 import { getMessageById, processMessage, retryMessage, deleteMessage, updateMessagePurpose } from '@/api/inbox'
+import { getTodosByMessage, updateTodoStatus } from '@/api/todo'
 
 const route = useRoute()
 const router = useRouter()
 
 const loading = ref(false)
 const msg = ref(null)
+const messageTodos = ref([])
+
+// 解析 AI 数据
+const parsedTodos = computed(() => {
+  if (!msg.value?.todosJson) return []
+  try {
+    return JSON.parse(msg.value.todosJson)
+  } catch {
+    return []
+  }
+})
+
+const parsedEntities = computed(() => {
+  if (!msg.value?.entitiesJson) return []
+  try {
+    return JSON.parse(msg.value.entitiesJson)
+  } catch {
+    return []
+  }
+})
+
+// 获取该消息关联的待办项（从数据库）
+const fetchMessageTodos = async () => {
+  const id = route.params.id
+  if (!id) return
+  try {
+    const res = await getTodosByMessage(id)
+    const { data, errorCode } = res.data
+    if (errorCode === 200 && data) {
+      messageTodos.value = data
+    }
+  } catch (err) {
+    console.error('获取消息待办失败:', err)
+  }
+}
+
+const handleTodoComplete = async (todoId) => {
+  try {
+    await updateTodoStatus(todoId, 'completed')
+    message.success('已完成')
+    fetchMessageTodos()
+  } catch {
+    message.error('操作失败')
+  }
+}
+
+const handleTodoCancel = async (todoId) => {
+  try {
+    await updateTodoStatus(todoId, 'cancelled')
+    message.success('已取消')
+    fetchMessageTodos()
+  } catch {
+    message.error('操作失败')
+  }
+}
+
+const handleTodoReopen = async (todoId) => {
+  try {
+    await updateTodoStatus(todoId, 'pending')
+    message.success('已重新打开')
+    fetchMessageTodos()
+  } catch {
+    message.error('操作失败')
+  }
+}
+
+const todoPriorityColor = (p) => ({ high: 'red', medium: 'orange', low: 'blue' }[p] || 'default')
+const todoPriorityLabel = (p) => ({ high: '紧急', medium: '一般', low: '可选' }[p] || p)
+const todoStatusColor = (s) => ({ pending: 'blue', completed: 'green', cancelled: 'default' }[s] || 'default')
+const todoStatusLabel = (s) => ({ pending: '待处理', completed: '已完成', cancelled: '已取消' }[s] || s)
 
 const fetchDetail = async () => {
   const id = route.params.id
@@ -292,12 +436,12 @@ const contentTypeLabel = (type) => {
 }
 
 const statusColor = (status) => {
-  const colors = { received: 'blue', processing: 'orange', parsed: 'cyan', archived: 'green', synced: 'green', failed: 'red' }
+  const colors = { received: 'blue', processing: 'orange', parsed: 'cyan', archived: 'green', synced: 'green', ingested: 'green', failed: 'red' }
   return colors[status] || 'default'
 }
 
 const statusLabel = (status) => {
-  const labels = { received: '待处理', processing: '处理中', parsed: '已解析', archived: '已归档', synced: '已同步', failed: '失败' }
+  const labels = { received: '待处理', processing: '处理中', parsed: '已解析', archived: '已归档', synced: '已同步', ingested: '已入库', failed: '失败' }
   return labels[status] || status || '未知'
 }
 
@@ -312,6 +456,7 @@ const formatFullTime = (timestamp) => {
 
 onMounted(() => {
   fetchDetail()
+  fetchMessageTodos()
 })
 </script>
 
@@ -428,5 +573,96 @@ onMounted(() => {
   margin-top: 24px;
   padding-top: 20px;
   border-top: 1px solid #f0f0f0;
+}
+
+/* AI 摘要 */
+.ai-summary-card {
+  background: linear-gradient(135deg, #f0f5ff 0%, #e6f0ff 100%);
+  border: 1px solid #d6e4ff;
+  border-left: 3px solid #597ef7;
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+
+.ai-summary-text {
+  color: #444;
+  line-height: 1.6;
+  margin: 0;
+  font-size: 14px;
+}
+
+/* 待办事项 */
+.todo-items-card {
+  background: #fff;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.todo-item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid #fafafa;
+  transition: background 0.15s;
+}
+
+.todo-item-row:last-child {
+  border-bottom: none;
+}
+
+.todo-item-row:hover {
+  background: #fafafa;
+}
+
+.todo-item-row.todo-done {
+  opacity: 0.6;
+}
+
+.todo-item-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.todo-item-content {
+  color: #333;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.todo-item-content.line-through {
+  text-decoration: line-through;
+  color: #999;
+}
+
+.todo-item-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+/* 实体标签 */
+.entity-tags-card {
+  background: #fff;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.entity-tag {
+  cursor: pointer;
+  font-size: 13px;
+  transition: transform 0.15s;
+}
+
+.entity-tag:hover {
+  transform: scale(1.05);
 }
 </style>

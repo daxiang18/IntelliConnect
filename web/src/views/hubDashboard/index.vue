@@ -34,6 +34,15 @@
           <span class="stat-label">已归档</span>
         </div>
       </div>
+      <div class="stat-card" @click="$router.push('/todoList')" style="cursor: pointer">
+        <div class="stat-icon" style="background: #fff0f6">
+          <OrderedListOutlined style="color: #eb2f96; font-size: 24px" />
+        </div>
+        <div class="stat-info">
+          <span class="stat-value">{{ pendingTodoCount }}</span>
+          <span class="stat-label">待办事项</span>
+        </div>
+      </div>
       <div class="stat-card">
         <div class="stat-icon" style="background: #fff1f0">
           <WarningOutlined style="color: #ff4d4f; font-size: 24px" />
@@ -101,6 +110,28 @@
           <span>知识归档</span>
           <span class="quick-link-badge success" v-if="archivedCount">{{ archivedCount }}</span>
         </div>
+        <div class="quick-link-card" @click="$router.push('/todoList')">
+          <OrderedListOutlined style="font-size: 28px; color: #eb2f96" />
+          <span>待办事项</span>
+          <span class="quick-link-badge" v-if="pendingTodoCount">{{ pendingTodoCount }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 待办事项快览 -->
+    <div class="dashboard-section" v-if="pendingTodos.length > 0">
+      <div class="section-header">
+        <h3>待办事项</h3>
+        <a-button type="link" @click="$router.push('/todoList')">查看全部</a-button>
+      </div>
+      <div class="todo-quick-list">
+        <div v-for="todo in pendingTodos" :key="todo.id" class="todo-quick-item">
+          <div class="todo-quick-left">
+            <a-tag :color="todoPriorityColor(todo.priority)" size="small">{{ todoPriorityLabel(todo.priority) }}</a-tag>
+            <span class="todo-quick-content">{{ todo.content }}</span>
+          </div>
+          <span class="todo-quick-time">{{ formatTime(todo.createdAt) }}</span>
+        </div>
       </div>
     </div>
 
@@ -140,16 +171,20 @@ import {
   WarningOutlined,
   EditOutlined,
   FolderOpenOutlined,
+  OrderedListOutlined,
 } from '@ant-design/icons-vue'
 import { getMessageStats, getInboxMessages } from '@/api/inbox'
+import { getTodos } from '@/api/todo'
 
 const stats = ref({})
 const recentMessages = ref([])
 const loadingRecent = ref(false)
+const pendingTodos = ref([])
+const pendingTodoCount = ref(0)
 
 const archivedCount = computed(() => {
   const s = stats.value.byStatus || {}
-  return (s.archived || 0) + (s.synced || 0) + (s.parsed || 0)
+  return (s.archived || 0) + (s.synced || 0) + (s.parsed || 0) + (s.ingested || 0)
 })
 
 const sourcePairs = computed(() => {
@@ -206,6 +241,22 @@ const fetchRecent = async () => {
   }
 }
 
+const fetchPendingTodos = async () => {
+  try {
+    const res = await getTodos({ page: 0, size: 5, status: 'pending' })
+    const { data, errorCode } = res.data
+    if (errorCode === 200 && data) {
+      pendingTodos.value = data.content || []
+      pendingTodoCount.value = data.totalElements || 0
+    }
+  } catch (err) {
+    console.error('获取待办失败:', err)
+  }
+}
+
+const todoPriorityColor = (p) => ({ high: 'red', medium: 'orange', low: 'blue' }[p] || 'default')
+const todoPriorityLabel = (p) => ({ high: '紧急', medium: '一般', low: '可选' }[p] || p)
+
 const truncate = (text, len) => {
   return text.length > len ? text.substring(0, len) + '...' : text
 }
@@ -241,12 +292,12 @@ const purposeBarColor = (purpose) => {
 }
 
 const statusColor = (status) => {
-  const colors = { received: 'blue', processing: 'orange', parsed: 'cyan', archived: 'green', synced: 'green', failed: 'red' }
+  const colors = { received: 'blue', processing: 'orange', parsed: 'cyan', archived: 'green', synced: 'green', ingested: 'green', failed: 'red' }
   return colors[status] || 'default'
 }
 
 const statusLabel = (status) => {
-  const labels = { received: '待处理', processing: '处理中', parsed: '已解析', archived: '已归档', synced: '已同步', failed: '失败' }
+  const labels = { received: '待处理', processing: '处理中', parsed: '已解析', archived: '已归档', synced: '已同步', ingested: '已入库', failed: '失败' }
   return labels[status] || status || '未知'
 }
 
@@ -264,6 +315,7 @@ const formatTime = (timestamp) => {
 onMounted(() => {
   fetchStats()
   fetchRecent()
+  fetchPendingTodos()
 })
 </script>
 
@@ -294,7 +346,7 @@ onMounted(() => {
 /* 统计卡片 */
 .stat-cards {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 16px;
   margin-bottom: 24px;
 }
@@ -396,7 +448,7 @@ onMounted(() => {
 /* 快捷入口 */
 .quick-links {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 16px;
 }
 
@@ -439,6 +491,53 @@ onMounted(() => {
 
 .quick-link-badge.success {
   background: #52c41a;
+}
+
+/* 待办快览 */
+.todo-quick-list {
+  background: #fff;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.todo-quick-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid #fafafa;
+  gap: 12px;
+}
+
+.todo-quick-item:last-child {
+  border-bottom: none;
+}
+
+.todo-quick-item:hover {
+  background: #fafafa;
+}
+
+.todo-quick-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.todo-quick-content {
+  color: #333;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.todo-quick-time {
+  color: #999;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 /* 最近消息 */
@@ -506,7 +605,7 @@ onMounted(() => {
   }
 
   .stat-cards {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 10px;
   }
 

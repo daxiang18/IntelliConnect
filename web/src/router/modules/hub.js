@@ -63,6 +63,16 @@ export default [
         },
       },
       {
+        path: '/todoList',
+        name: 'todoList',
+        component: () => import('@/views/todoList/index.vue'),
+        meta: {
+          title: 'todoList',
+          auth: ['[ROLE_admin]', '[ROLE_guest]', '[ROLE_wx_user]'],
+          domain: 'hub',
+        },
+      },
+      {
         path: '/messageDetail/:id',
         name: 'messageDetail',
         component: () => import('@/views/messageDetail/index.vue'),

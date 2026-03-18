@@ -81,6 +81,7 @@ const hubCore = {
   quickNote: 'Quick Note',
   archive: 'Archive',
   syncStatus: 'Sync Status',
+  todoList: 'Todo List',
   messageDetail: 'Message Detail',
 }
 const permission = {

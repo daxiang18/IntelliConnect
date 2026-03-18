@@ -42,6 +42,7 @@
         >
           <a-select-option value="received">待处理</a-select-option>
           <a-select-option value="processing">处理中</a-select-option>
+          <a-select-option value="ingested">已入库</a-select-option>
           <a-select-option value="parsed">已解析</a-select-option>
           <a-select-option value="archived">已归档</a-select-option>
           <a-select-option value="synced">已同步</a-select-option>
@@ -171,6 +172,12 @@
                 <a-tag v-if="msg.documentPurpose" :color="purposeColor(msg.documentPurpose)" size="small">
                   {{ purposeLabel(msg.documentPurpose) }}
                 </a-tag>
+                <template v-if="msg.category">
+                  <a-tag size="small" color="default">{{ msg.category }}</a-tag>
+                </template>
+                <template v-if="msg.tags && msg.tags.length > 0">
+                  <a-tag v-for="tag in msg.tags" :key="tag" size="small" color="default" class="content-tag">{{ tag }}</a-tag>
+                </template>
               </div>
               <div class="message-header-right">
                 <span class="message-time">{{ formatTime(msg.receivedAt) }}</span>
@@ -180,6 +187,10 @@
               </div>
             </div>
             <div class="message-card-body" @click="toggleExpand(msg.id)">
+              <p v-if="msg.aiSummary" class="message-ai-summary">
+                <span class="ai-label">AI</span>
+                {{ msg.aiSummary }}
+              </p>
               <div
                 class="message-content-wrap"
                 :class="{ 'content-collapsed': !expandedIds.has(msg.id) && getContentLength(msg) > 200 }"
@@ -495,12 +506,12 @@ const contentTypeLabel = (type) => {
 }
 
 const statusColor = (status) => {
-  const colors = { received: 'blue', processing: 'orange', parsed: 'cyan', archived: 'green', synced: 'green', failed: 'red' }
+  const colors = { received: 'blue', processing: 'orange', parsed: 'cyan', archived: 'green', synced: 'green', ingested: 'green', failed: 'red' }
   return colors[status] || 'default'
 }
 
 const statusLabel = (status) => {
-  const labels = { received: '待处理', processing: '处理中', parsed: '已解析', archived: '已归档', synced: '已同步', failed: '失败' }
+  const labels = { received: '待处理', processing: '处理中', parsed: '已解析', archived: '已归档', synced: '已同步', ingested: '已入库', failed: '失败' }
   return labels[status] || status || '未知'
 }
 
@@ -724,6 +735,35 @@ onUnmounted(() => {
 
 .message-card-body {
   cursor: pointer;
+}
+
+.message-ai-summary {
+  color: #666;
+  font-size: 12px;
+  font-style: italic;
+  margin: 0 0 6px 0;
+  padding: 4px 8px;
+  background: #f5f7fa;
+  border-radius: 4px;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.ai-label {
+  display: inline-block;
+  background: linear-gradient(135deg, #597ef7, #9254de);
+  color: #fff;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 600;
+  padding: 0 5px;
+  border-radius: 3px;
+  margin-right: 4px;
+  vertical-align: middle;
+  line-height: 16px;
 }
 
 .message-content-wrap {

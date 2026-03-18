@@ -32,9 +32,15 @@ import {
   Result,
   Upload,
   InputNumber,
-  Space ,
-  Slider,  // 添加 Slider 组件导入
-  // Input
+  Space,
+  Slider,
+  Popconfirm,
+  Popover,
+  Pagination,
+  Progress,
+  Spin,
+  Empty,
+  Tooltip,
 } from 'ant-design-vue'
 import * as AntdIcon from '@ant-design/icons-vue'
 import 'ant-design-vue/dist/reset.css'
@@ -74,7 +80,14 @@ export function setupAntd(app) {
   app.use(Upload)
   app.use(InputNumber)
   app.use(Space)
-  app.use(Slider)  // 添加 Slider 组件注册
+  app.use(Slider)
+  app.use(Popconfirm)
+  app.use(Popover)
+  app.use(Pagination)
+  app.use(Progress)
+  app.use(Spin)
+  app.use(Empty)
+  app.use(Tooltip)
   for (let c in AntdIcon) {
     app.component(c, AntdIcon[c])
   }

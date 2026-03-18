@@ -65,6 +65,7 @@
           <a-select-option value="parsed">已解析</a-select-option>
           <a-select-option value="archived">已归档</a-select-option>
           <a-select-option value="synced">已同步</a-select-option>
+          <a-select-option value="ingested">已入库</a-select-option>
         </a-select>
       </a-space>
     </div>
@@ -96,6 +97,12 @@
                 <a-tag v-if="msg.documentPurpose" :color="purposeColor(msg.documentPurpose)" size="small">
                   {{ purposeLabel(msg.documentPurpose) }}
                 </a-tag>
+                <template v-if="msg.category">
+                  <a-tag size="small" color="default">{{ msg.category }}</a-tag>
+                </template>
+                <template v-if="msg.tags && msg.tags.length > 0">
+                  <a-tag v-for="tag in msg.tags" :key="tag" size="small" color="default" class="content-tag">{{ tag }}</a-tag>
+                </template>
               </div>
               <div class="archive-header-right">
                 <span class="archive-time">{{ formatTime(msg.receivedAt) }}</span>
@@ -256,12 +263,12 @@ const contentTypeLabel = (type) => {
 }
 
 const statusColor = (status) => {
-  const colors = { parsed: 'cyan', archived: 'green', synced: 'green' }
+  const colors = { parsed: 'cyan', archived: 'green', synced: 'green', ingested: 'green' }
   return colors[status] || 'default'
 }
 
 const statusLabel = (status) => {
-  const labels = { parsed: '已解析', archived: '已归档', synced: '已同步' }
+  const labels = { parsed: '已解析', archived: '已归档', synced: '已同步', ingested: '已入库' }
   return labels[status] || status || '未知'
 }
 

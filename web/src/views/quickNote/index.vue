@@ -176,12 +176,12 @@ const truncate = (text, len) => {
 }
 
 const statusColor = (status) => {
-  const colors = { received: 'blue', processing: 'orange', parsed: 'cyan', archived: 'green', synced: 'green', failed: 'red' }
+  const colors = { received: 'blue', processing: 'orange', parsed: 'cyan', archived: 'green', synced: 'green', ingested: 'green', failed: 'red' }
   return colors[status] || 'default'
 }
 
 const statusLabel = (status) => {
-  const labels = { received: '待处理', processing: '处理中', parsed: '已解析', archived: '已归档', synced: '已同步', failed: '失败' }
+  const labels = { received: '待处理', processing: '处理中', parsed: '已解析', archived: '已归档', synced: '已同步', ingested: '已入库', failed: '失败' }
   return labels[status] || status || '未知'
 }
 

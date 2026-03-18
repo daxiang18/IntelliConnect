@@ -36,3 +36,14 @@ build/
 
 /docker/models
 /web/package-lock.json
+
+### Build artifacts ###
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+logs/
+temp-audio/
+temp-rainy/
+
+### Local environment overrides ###
+/application-dev.yaml
+/docker/.env

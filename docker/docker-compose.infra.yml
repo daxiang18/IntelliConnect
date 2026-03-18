@@ -1,0 +1,113 @@
+# IntelliConnect 基础设施服务（数据库/中间件/AI 服务）
+# Spring Boot 后端在宿主机源码方式运行
+services:
+  redis:
+    image: redis:6.2.17
+    container_name: IntelliConnect-ce-redis
+    sysctls:
+      - net.core.somaxconn=1024
+    ports:
+      - "6379:6379"
+    volumes:
+      - "redis-volume:/data"
+    command: redis-server --requirepass 1234 --appendonly yes
+    environment:
+      - TZ=Asia/Shanghai
+
+  mysql:
+    image: mysql:8.0
+    container_name: IntelliConnect-ce-mysql
+    ports:
+      - "3306:3306"
+    volumes:
+      - "mysql-volume:/etc/mysql/conf.d"
+      - "mysql-volume:/var/lib/mysql"
+      - "mysql-volume:/logs"
+    environment:
+      - MYSQL_ROOT_PASSWORD=XzHvhX4CDaN696oQAXdmlcsrqgWbkxRl
+      - MYSQL_DATABASE=cwliot1.8
+      - TZ=Asia/Shanghai
+    command: [ "--default-authentication-plugin=mysql_native_password" ]
+
+  influxdb:
+    image: influxdb:1.6.4
+    container_name: IntelliConnect-ce-influxdb
+    volumes:
+      - "influxdb-volume:/etc/influxdb"
+      - "influxdb-volume:/var/lib/influxdb/data"
+      - "influxdb-volume:/var/lib/influxdb/meta"
+      - "influxdb-volume:/var/lib/influxdb/wal"
+    ports:
+      - 8086:8086
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: cwl
+      DOCKER_INFLUXDB_INIT_PASSWORD: 1234
+      DOCKER_INFLUXDB_INIT_ORG: my-org
+      DOCKER_INFLUXDB_INIT_BUCKET: buketname
+
+  emqx:
+    image: emqx:5.8.4
+    container_name: IntelliConnect-ce-emqx
+    restart: always
+    environment:
+      - EMQX_BOOTSTRAP_DEFAULT_ADMIN_USERNAME=admin
+      - EMQX_BOOTSTRAP_DEFAULT_ADMIN_PASSWORD=XdmlcsrqgWbkxRl1.
+      - TZ=Asia/Shanghai
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:18083/status" ]
+      interval: 30s
+      timeout: 25s
+      retries: 5
+    networks:
+      emqx-bridge:
+        aliases:
+          - node1.emqx.io
+    ports:
+      - 1883:1883
+      - 8083:8083
+      - 8084:8084
+      - 8883:8883
+      - 18083:18083
+    volumes:
+      - "emqx-volume:/opt/emqx/log"
+      - "emqx-volume:/opt/emqx/data"
+
+  chromadb:
+    image: chromadb/chroma:0.4.24
+    container_name: IntelliConnect-ce-chromadb
+    restart: always
+    ports:
+      - "8010:8000"   # 映射到 8010，避免与 autossh 隧道(8800→8000)冲突
+    volumes:
+      - "chromadb-volume:/chroma/chroma"
+    environment:
+      - TZ=Asia/Shanghai
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/chroma/chroma
+    healthcheck:
+      test: [ "CMD", "/bin/bash", "-c", "cat < /dev/null > /dev/tcp/localhost/8000" ]  # 容器内部仍是 8000
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  funasr:
+    image: harryliu888/funasr-online-server:latest
+    container_name: funasr-online-server
+    ports:
+      - 10095:10095
+      - 10096:10096
+    volumes:
+      - ./models:/workspace/models
+
+volumes:
+  mysql-volume:
+  redis-volume:
+  influxdb-volume:
+  emqx-volume:
+  chromadb-volume:
+  funasr-volume:
+
+networks:
+  emqx-bridge:
+    driver: bridge

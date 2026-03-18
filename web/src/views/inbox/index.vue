@@ -210,7 +210,7 @@
                 {{ expandedIds.has(msg.id) ? '收起' : '展开全文' }}
               </a-button>
             </div>
-            <div class="message-card-footer" v-if="msg.status === 'received' || msg.status === 'failed'">
+            <div class="message-card-footer" v-if="msg.status === 'received' || msg.status === 'failed' || (msg.status === 'ingested' && !msg.aiSummary)">
               <a-popconfirm
                 v-if="msg.status === 'received'"
                 title="确定要处理这条消息吗？"
@@ -233,6 +233,18 @@
                 <a-button size="small" type="link" danger>
                   <template #icon><RedoOutlined /></template>
                   重试
+                </a-button>
+              </a-popconfirm>
+              <a-popconfirm
+                v-if="msg.status === 'ingested' && !msg.aiSummary"
+                title="重新进行 AI 分析（分类/摘要/待办提取）？"
+                ok-text="确定"
+                cancel-text="取消"
+                @confirm="handleReprocess(msg.id)"
+              >
+                <a-button size="small" type="link" style="color: #722ed1;">
+                  <template #icon><SyncOutlined /></template>
+                  重新分析
                 </a-button>
               </a-popconfirm>
             </div>
@@ -265,8 +277,9 @@ import {
   ThunderboltOutlined,
   RedoOutlined,
   DeleteOutlined,
+  SyncOutlined,
 } from '@ant-design/icons-vue'
-import { getInboxMessages, processMessage, retryMessage, batchProcessMessages, batchDeleteMessages } from '@/api/inbox'
+import { getInboxMessages, processMessage, retryMessage, reprocessMessage, batchProcessMessages, batchDeleteMessages } from '@/api/inbox'
 
 const loading = ref(false)
 const batchLoading = ref(false)
@@ -427,6 +440,17 @@ const handleRetry = async (id) => {
     fetchMessages()
   } catch (err) {
     message.error('重试失败')
+  }
+}
+
+const handleReprocess = async (id) => {
+  try {
+    await reprocessMessage(id)
+    message.success('已提交重新分析，请稍候刷新查看结果')
+    // 延迟刷新，给后端异步处理一点时间
+    setTimeout(() => fetchMessages(), 3000)
+  } catch (err) {
+    message.error('重新分析失败')
   }
 }
 

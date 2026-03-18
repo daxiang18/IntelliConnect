@@ -37,6 +37,14 @@ export const retryMessage = (id) =>
     headers: { Authorization: getToken() },
   })
 
+/** 重新处理已入库消息（重跑 AI 分析） */
+export const reprocessMessage = (id) =>
+  request({
+    url: `/api/v2/input/messages/${id}/reprocess`,
+    method: 'post',
+    headers: { Authorization: getToken() },
+  })
+
 /** 查询归档消息列表（支持关键词搜索） */
 export const getArchivedMessages = (params) =>
   request({

@@ -223,6 +223,18 @@
               </a-button>
             </a-popconfirm>
             <a-popconfirm
+              v-if="msg.status === 'ingested' && !msg.aiSummary"
+              title="重新进行 AI 分析（分类/摘要/待办提取）？"
+              ok-text="确定"
+              cancel-text="取消"
+              @confirm="handleReprocess"
+            >
+              <a-button style="color: #722ed1; border-color: #722ed1;">
+                <template #icon><SyncOutlined /></template>
+                重新分析
+              </a-button>
+            </a-popconfirm>
+            <a-popconfirm
               title="确定要删除这条消息吗？此操作不可恢复。"
               ok-text="确定删除"
               cancel-text="取消"
@@ -256,8 +268,9 @@ import {
   BulbOutlined,
   TagOutlined,
   OrderedListOutlined,
+  SyncOutlined,
 } from '@ant-design/icons-vue'
-import { getMessageById, processMessage, retryMessage, deleteMessage, updateMessagePurpose } from '@/api/inbox'
+import { getMessageById, processMessage, retryMessage, reprocessMessage, deleteMessage, updateMessagePurpose } from '@/api/inbox'
 import { getTodosByMessage, updateTodoStatus } from '@/api/todo'
 
 const route = useRoute()
@@ -379,6 +392,16 @@ const handleRetry = async () => {
     fetchDetail()
   } catch (err) {
     message.error('重试失败')
+  }
+}
+
+const handleReprocess = async () => {
+  try {
+    await reprocessMessage(msg.value.id)
+    message.success('已提交重新分析，请稍候刷新查看结果')
+    setTimeout(() => fetchDetail(), 3000)
+  } catch (err) {
+    message.error('重新分析失败')
   }
 }
 

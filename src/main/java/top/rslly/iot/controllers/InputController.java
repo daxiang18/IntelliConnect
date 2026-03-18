@@ -98,6 +98,13 @@ public class InputController {
     return inputMessageService.retryMessage(id, header);
   }
 
+  @Operation(summary = "重新处理已入库消息", description = "对 status=ingested/failed 的消息重跑 AI 分析、向量写入、知识图谱关联")
+  @RequestMapping(value = "/messages/{id}/reprocess", method = RequestMethod.POST)
+  public JsonResult<?> reprocessMessage(@PathVariable("id") @Min(1) long id,
+      @RequestHeader("Authorization") String header) {
+    return inputMessageService.reprocessMessage(id, header);
+  }
+
   @Operation(summary = "召回已处理的输入消息", description = "按当前认证用户及可选会话范围对已入向量库的消息做语义检索")
   @RequestMapping(value = "/messages/recall", method = RequestMethod.POST)
   public JsonResult<?> recallMessages(@Valid @RequestBody InputMessageRecallParam inputMessageRecallParam,

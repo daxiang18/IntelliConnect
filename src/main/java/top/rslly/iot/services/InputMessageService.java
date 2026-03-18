@@ -42,6 +42,9 @@ public interface InputMessageService {
 
   JsonResult<?> retryMessage(long id, String token);
 
+  /** 重新处理已入库消息（重跑 AI 分析、向量写入、知识图谱） */
+  JsonResult<?> reprocessMessage(long id, String token);
+
   JsonResult<?> recallMessages(InputMessageRecallParam inputMessageRecallParam, String token);
 
   JsonResult<?> promoteMessageToLongMemory(long id, InputMessagePromoteParam inputMessagePromoteParam,

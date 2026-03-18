@@ -1167,6 +1167,34 @@ public class InputMessageServiceImpl implements InputMessageService {
   }
 
   @Override
+  @Transactional(rollbackFor = Exception.class)
+  public JsonResult<?> reprocessMessage(long id, String token) {
+    String username;
+    try {
+      username = resolveUsername(token);
+    } catch (Exception e) {
+      log.warn("reprocess input message failed to parse token, messageId={}", id, e);
+      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
+    }
+    var entityOptional = inputMessageRepository.findById(id);
+    if (entityOptional.isEmpty() || !username.equals(entityOptional.get().getCreatedBy())) {
+      return ResultTool.fail(ResultCode.NO_PERMISSION);
+    }
+    InputMessageEntity entity = entityOptional.get();
+    // 只允许 ingested/failed 状态的消息重新处理
+    if (!STATUS_INGESTED.equals(entity.getStatus()) && !STATUS_FAILED.equals(entity.getStatus())) {
+      log.warn("reprocess rejected: messageId={}, currentStatus={}", id, entity.getStatus());
+      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
+    }
+    log.info("reprocess queued: messageId={}, dedupeKey={}, previousStatus={}, user={}",
+        entity.getId(), entity.getDedupeKey(), entity.getStatus(), username);
+    // 将状态回退到 received，让 processMessage 重新走完整流程
+    entity.setStatus(STATUS_RECEIVED);
+    inputMessageRepository.save(entity);
+    return processMessageForUsername(id, username);
+  }
+
+  @Override
   public JsonResult<?> recallMessages(InputMessageRecallParam inputMessageRecallParam, String token) {
     String username;
     try {

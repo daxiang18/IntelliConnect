@@ -76,6 +76,7 @@ public class RagUtility {
       Map<String, String> metadataMap = new HashMap<>();
       metadataMap.put("productId", productId);
       metadataMap.put("fileName", fileName);
+      metadataMap.put("documentType", "product_knowledge");
       Metadata metadata = Metadata.from(metadataMap);
       TextSegment segmentWithMetadata = TextSegment.from(segment.text(), metadata);
       Embedding embedding = embeddingModel.embed(segmentWithMetadata).content();
@@ -124,7 +125,8 @@ public class RagUtility {
       EmbeddingStore<TextSegment> store, EmbeddingModel embeddingModel,
       String query, String createdBy, String sessionId, int maxResults, double minScore) {
     Embedding queryEmbedding = embeddingModel.embed(query).content();
-    Filter filter = metadataKey("createdBy").isEqualTo(createdBy);
+    Filter filter = metadataKey("createdBy").isEqualTo(createdBy)
+        .and(metadataKey("documentType").isEqualTo("personal_input"));
     if (sessionId != null && !sessionId.isBlank()) {
       filter = filter.and(metadataKey("sessionId").isEqualTo(sessionId));
     }

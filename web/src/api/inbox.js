@@ -74,3 +74,11 @@ export const batchDeleteMessages = (ids) =>
     method: 'post',
     data: ids,
   })
+
+/** 更新消息文档用途 */
+export const updateMessagePurpose = (id, documentPurpose) =>
+  request({
+    url: `/api/v2/input/messages/${id}/purpose`,
+    method: 'put',
+    params: { documentPurpose },
+  })

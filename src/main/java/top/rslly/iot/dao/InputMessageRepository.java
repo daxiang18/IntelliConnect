@@ -79,7 +79,7 @@ public interface InputMessageRepository extends JpaRepository<InputMessageEntity
       @Param("sessionId") String sessionId, @Param("createdBy") String createdBy, @Param("status") String status,
       @Param("threshold") Long threshold, Pageable pageable);
 
-  /** 通用多条件组合查询（支持关键词搜索 + 日期范围） */
+  /** 通用多条件组合查询（支持关键词搜索 + 日期范围 + 文档用途） */
   @Query("""
       select e from InputMessageEntity e
       where e.createdBy = :createdBy
@@ -90,6 +90,7 @@ public interface InputMessageRepository extends JpaRepository<InputMessageEntity
         and (:archivedOnly = false or e.status in ('parsed', 'archived', 'synced'))
         and (:startTime is null or e.receivedAt >= :startTime)
         and (:endTime is null or e.receivedAt <= :endTime)
+        and (:documentPurpose is null or e.documentPurpose = :documentPurpose)
       order by e.receivedAt desc
       """)
   Page<InputMessageEntity> searchMessages(
@@ -101,6 +102,7 @@ public interface InputMessageRepository extends JpaRepository<InputMessageEntity
       @Param("archivedOnly") boolean archivedOnly,
       @Param("startTime") Long startTime,
       @Param("endTime") Long endTime,
+      @Param("documentPurpose") String documentPurpose,
       Pageable pageable);
 
   /** 按创建者统计各状态消息数量 */
@@ -127,6 +129,15 @@ public interface InputMessageRepository extends JpaRepository<InputMessageEntity
       group by e.syncStatus
       """)
   List<Object[]> countBySyncStatusGrouped(@Param("createdBy") String createdBy);
+
+  /** 按创建者统计各文档用途消息数量 */
+  @Query("""
+      select e.documentPurpose, count(e) from InputMessageEntity e
+      where e.createdBy = :createdBy
+        and e.documentPurpose is not null and e.documentPurpose <> ''
+      group by e.documentPurpose
+      """)
+  List<Object[]> countByDocumentPurposeGrouped(@Param("createdBy") String createdBy);
 
   /** 按创建者查询需要同步的消息列表（有 syncTargets 的），按同步时间倒序 */
   @Query("""

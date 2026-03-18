@@ -66,6 +66,18 @@
           style="width: 240px"
           @change="handleDateRangeChange"
         />
+        <a-select
+          v-model:value="filters.documentPurpose"
+          placeholder="文档用途"
+          allowClear
+          style="width: 140px"
+          @change="handleFilterChange"
+        >
+          <a-select-option value="quick_capture">速记</a-select-option>
+          <a-select-option value="study_doc">学习文档</a-select-option>
+          <a-select-option value="work_doc">工作文档</a-select-option>
+          <a-select-option value="life_record">生活记录</a-select-option>
+        </a-select>
       </a-space>
     </div>
 
@@ -156,6 +168,9 @@
                 <a-tag :color="sourceTypeColor(msg.sourceType)">{{ sourceTypeLabel(msg.sourceType) }}</a-tag>
                 <a-tag>{{ contentTypeLabel(msg.contentType) }}</a-tag>
                 <a-tag :color="statusColor(msg.status)">{{ statusLabel(msg.status) }}</a-tag>
+                <a-tag v-if="msg.documentPurpose" :color="purposeColor(msg.documentPurpose)" size="small">
+                  {{ purposeLabel(msg.documentPurpose) }}
+                </a-tag>
               </div>
               <div class="message-header-right">
                 <span class="message-time">{{ formatTime(msg.receivedAt) }}</span>
@@ -261,6 +276,7 @@ const filters = reactive({
   sourceType: undefined,
   status: undefined,
   contentType: undefined,
+  documentPurpose: undefined,
 })
 
 // 批量选择
@@ -307,6 +323,7 @@ const fetchMessages = async (silent = false) => {
     if (filters.sourceType) params.sourceType = filters.sourceType
     if (filters.status) params.status = filters.status
     if (filters.contentType) params.contentType = filters.contentType
+    if (filters.documentPurpose) params.documentPurpose = filters.documentPurpose
     if (keyword.value.trim()) params.keyword = keyword.value.trim()
     if (dateRange.value && dateRange.value.length === 2) {
       params.startTime = dateRange.value[0].startOf('day').valueOf()
@@ -485,6 +502,16 @@ const statusColor = (status) => {
 const statusLabel = (status) => {
   const labels = { received: '待处理', processing: '处理中', parsed: '已解析', archived: '已归档', synced: '已同步', failed: '失败' }
   return labels[status] || status || '未知'
+}
+
+const purposeColor = (purpose) => {
+  const colors = { quick_capture: 'gold', study_doc: 'purple', work_doc: 'geekblue', life_record: 'cyan' }
+  return colors[purpose] || 'default'
+}
+
+const purposeLabel = (purpose) => {
+  const labels = { quick_capture: '速记', study_doc: '学习', work_doc: '工作', life_record: '生活' }
+  return labels[purpose] || purpose || ''
 }
 
 const formatTime = (timestamp) => {

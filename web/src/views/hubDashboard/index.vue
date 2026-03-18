@@ -64,6 +64,25 @@
       </div>
     </div>
 
+    <!-- 文档用途分布 -->
+    <div class="dashboard-section" v-if="purposePairs.length > 0">
+      <h3>文档用途分布</h3>
+      <div class="source-bars">
+        <div v-for="item in purposePairs" :key="item.key" class="source-bar-item">
+          <div class="source-bar-label">
+            <a-tag :color="purposeColor(item.key)" size="small">{{ purposeLabel(item.key) }}</a-tag>
+            <span class="source-count">{{ item.count }}</span>
+          </div>
+          <a-progress
+            :percent="purposeTotal > 0 ? Math.round((item.count / purposeTotal) * 100) : 0"
+            :stroke-color="purposeBarColor(item.key)"
+            :show-info="false"
+            size="small"
+          />
+        </div>
+      </div>
+    </div>
+
     <!-- 快捷入口 -->
     <div class="dashboard-section">
       <h3>快捷入口</h3>
@@ -140,6 +159,17 @@ const sourcePairs = computed(() => {
     .sort((a, b) => b.count - a.count)
 })
 
+const purposePairs = computed(() => {
+  const byPurpose = stats.value.byPurpose || {}
+  return Object.entries(byPurpose)
+    .map(([key, count]) => ({ key, count }))
+    .sort((a, b) => b.count - a.count)
+})
+
+const purposeTotal = computed(() => {
+  return purposePairs.value.reduce((sum, item) => sum + item.count, 0)
+})
+
 const greeting = computed(() => {
   const hour = new Date().getHours()
   if (hour < 6) return '夜深了，注意休息'
@@ -193,6 +223,21 @@ const sourceTypeLabel = (type) => {
 const sourceBarColor = (type) => {
   const colors = { wechat: '#52c41a', 'wx-official': '#52c41a', 'web-manual': '#1890ff', feishu: '#722ed1', qq: '#fa8c16' }
   return colors[type] || '#d9d9d9'
+}
+
+const purposeColor = (purpose) => {
+  const colors = { quick_capture: 'gold', study_doc: 'purple', work_doc: 'geekblue', life_record: 'cyan' }
+  return colors[purpose] || 'default'
+}
+
+const purposeLabel = (purpose) => {
+  const labels = { quick_capture: '速记', study_doc: '学习', work_doc: '工作', life_record: '生活' }
+  return labels[purpose] || purpose || '未知'
+}
+
+const purposeBarColor = (purpose) => {
+  const colors = { quick_capture: '#faad14', study_doc: '#722ed1', work_doc: '#2f54eb', life_record: '#13c2c2' }
+  return colors[purpose] || '#d9d9d9'
 }
 
 const statusColor = (status) => {

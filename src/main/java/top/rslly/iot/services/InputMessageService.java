@@ -47,16 +47,19 @@ public interface InputMessageService {
   JsonResult<?> promoteMessageToLongMemory(long id, InputMessagePromoteParam inputMessagePromoteParam,
       String token);
 
-  /** 收件箱：分页查询当前用户所有消息，支持按来源类型、状态、内容类型、关键词、日期范围筛选 */
+  /** 收件箱：分页查询当前用户所有消息，支持按来源类型、状态、内容类型、关键词、日期范围、文档用途筛选 */
   JsonResult<?> listMessages(String sourceType, String status, String contentType,
       String keyword, Boolean archived, Long startTime, Long endTime,
-      Integer page, Integer size, String token);
+      String documentPurpose, Integer page, Integer size, String token);
 
   /** 消息统计：按状态和来源类型分组统计 */
   JsonResult<?> getMessageStats(String token);
 
   /** 查询单条消息详情 */
   JsonResult<?> getMessageById(long id, String token);
+
+  /** 更新消息文档用途（仅所有者可操作） */
+  JsonResult<?> updateMessagePurpose(long id, String documentPurpose, String token);
 
   /** 删除消息（仅所有者可操作） */
   JsonResult<?> deleteMessage(long id, String token);

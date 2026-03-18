@@ -69,4 +69,7 @@ public class InputMessageCreateParam {
 
   @Size(max = 128, message = "syncTargets 长度不能超过 128")
   private String syncTargets;
+
+  @Size(max = 64, message = "documentPurpose 长度不能超过 64")
+  private String documentPurpose;
 }

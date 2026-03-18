@@ -33,6 +33,29 @@
             <a-tag>{{ contentTypeLabel(msg.contentType) }}</a-tag>
           </div>
           <div class="meta-row">
+            <span class="meta-label">文档用途</span>
+            <a-select
+              :value="msg.documentPurpose || undefined"
+              placeholder="选择用途"
+              style="width: 140px"
+              size="small"
+              allowClear
+              @change="handlePurposeChange"
+            >
+              <a-select-option value="quick_capture">速记</a-select-option>
+              <a-select-option value="study_doc">学习文档</a-select-option>
+              <a-select-option value="work_doc">工作文档</a-select-option>
+              <a-select-option value="life_record">生活记录</a-select-option>
+            </a-select>
+          </div>
+          <div class="meta-row" v-if="msg.category">
+            <span class="meta-label">自动分类</span>
+            <a-tag size="small">{{ msg.category }}</a-tag>
+            <template v-if="msg.tags && msg.tags.length > 0">
+              <a-tag v-for="tag in msg.tags" :key="tag" size="small" color="default">{{ tag }}</a-tag>
+            </template>
+          </div>
+          <div class="meta-row">
             <span class="meta-label">接收时间</span>
             <span class="meta-value">{{ formatFullTime(msg.receivedAt) }}</span>
           </div>
@@ -161,7 +184,7 @@ import {
   RedoOutlined,
   DeleteOutlined,
 } from '@ant-design/icons-vue'
-import { getMessageById, processMessage, retryMessage, deleteMessage } from '@/api/inbox'
+import { getMessageById, processMessage, retryMessage, deleteMessage, updateMessagePurpose } from '@/api/inbox'
 
 const route = useRoute()
 const router = useRouter()
@@ -227,6 +250,21 @@ const handleDelete = async () => {
     }
   } catch (err) {
     message.error('删除失败')
+  }
+}
+
+const handlePurposeChange = async (value) => {
+  try {
+    const res = await updateMessagePurpose(msg.value.id, value || '')
+    const { errorCode } = res.data
+    if (errorCode === 200) {
+      message.success('用途已更新')
+      fetchDetail()
+    } else {
+      message.error('更新失败')
+    }
+  } catch (err) {
+    message.error('更新失败')
   }
 }
 

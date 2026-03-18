@@ -20,6 +20,12 @@
             <a-select-option value="text">文本</a-select-option>
             <a-select-option value="url">链接</a-select-option>
           </a-select>
+          <a-select v-model:value="documentPurpose" style="width: 120px" size="small">
+            <a-select-option value="quick_capture">速记</a-select-option>
+            <a-select-option value="study_doc">学习文档</a-select-option>
+            <a-select-option value="work_doc">工作文档</a-select-option>
+            <a-select-option value="life_record">生活记录</a-select-option>
+          </a-select>
         </div>
         <div class="toolbar-right">
           <span class="save-hint" v-if="noteContent.trim()">Ctrl+Enter</span>
@@ -54,6 +60,9 @@
                 {{ statusLabel(note.status) }}
               </a-tag>
               <a-tag v-if="note.contentType === 'url'" size="small" color="blue">链接</a-tag>
+              <a-tag v-if="note.documentPurpose" size="small" :color="purposeColor(note.documentPurpose)">
+                {{ purposeLabel(note.documentPurpose) }}
+              </a-tag>
               <span class="note-time">{{ formatTime(note.receivedAt) }}</span>
             </div>
             <p class="note-content">{{ truncate(note.normalizedContent || note.rawContent || '', 150) }}</p>
@@ -86,6 +95,7 @@ import { createMessage, getInboxMessages, processMessage } from '@/api/inbox'
 const textareaRef = ref(null)
 const noteContent = ref('')
 const contentType = ref('text')
+const documentPurpose = ref('quick_capture')
 const submitting = ref(false)
 const recentNotes = ref([])
 const loadingRecent = ref(false)
@@ -108,17 +118,22 @@ const handleSubmit = async () => {
       type = 'url'
     }
 
+    const dedupeKey = `web-manual-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`
+
     const res = await createMessage({
       sourceType: 'web-manual',
       contentType: type,
       rawContent: content,
       sessionId: 'quicknote',
+      dedupeKey,
+      documentPurpose: documentPurpose.value,
     })
     const { errorCode } = res.data
     if (errorCode === 200) {
       message.success('保存成功')
       noteContent.value = ''
       contentType.value = 'text'
+      documentPurpose.value = 'quick_capture'
       fetchRecent()
     } else {
       message.error('保存失败')
@@ -168,6 +183,16 @@ const statusColor = (status) => {
 const statusLabel = (status) => {
   const labels = { received: '待处理', processing: '处理中', parsed: '已解析', archived: '已归档', synced: '已同步', failed: '失败' }
   return labels[status] || status || '未知'
+}
+
+const purposeColor = (purpose) => {
+  const colors = { quick_capture: 'gold', study_doc: 'purple', work_doc: 'geekblue', life_record: 'cyan' }
+  return colors[purpose] || 'default'
+}
+
+const purposeLabel = (purpose) => {
+  const labels = { quick_capture: '速记', study_doc: '学习', work_doc: '工作', life_record: '生活' }
+  return labels[purpose] || purpose || ''
 }
 
 const formatTime = (timestamp) => {

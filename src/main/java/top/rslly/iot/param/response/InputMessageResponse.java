@@ -46,4 +46,5 @@ public class InputMessageResponse {
   private String externalReferencesJson;
   private String category;
   private List<String> tags;
+  private String documentPurpose;
 }

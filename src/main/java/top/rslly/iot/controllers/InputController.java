@@ -119,7 +119,7 @@ public class InputController {
     return inputMessageService.promoteMessageToLongMemory(id, inputMessagePromoteParam, header);
   }
 
-  @Operation(summary = "收件箱消息列表", description = "分页查询当前用户所有输入消息，支持按来源类型、状态、内容类型、关键词、日期范围筛选")
+  @Operation(summary = "收件箱消息列表", description = "分页查询当前用户所有输入消息，支持按来源类型、状态、内容类型、关键词、日期范围、文档用途筛选")
   @RequestMapping(value = "/messages", method = RequestMethod.GET)
   public JsonResult<?> listMessages(
       @RequestParam(value = "sourceType", required = false) String sourceType,
@@ -129,11 +129,12 @@ public class InputController {
       @RequestParam(value = "archived", required = false) Boolean archived,
       @RequestParam(value = "startTime", required = false) Long startTime,
       @RequestParam(value = "endTime", required = false) Long endTime,
+      @RequestParam(value = "documentPurpose", required = false) String documentPurpose,
       @RequestParam(value = "page", required = false) Integer page,
       @RequestParam(value = "size", required = false) Integer size,
       @RequestHeader("Authorization") String header) {
     return inputMessageService.listMessages(sourceType, status, contentType, keyword, archived,
-        startTime, endTime, page, size, header);
+        startTime, endTime, documentPurpose, page, size, header);
   }
 
   @Operation(summary = "消息统计", description = "按状态和来源类型分组统计当前用户消息数量")
@@ -147,6 +148,14 @@ public class InputController {
   public JsonResult<?> getMessageById(@PathVariable("id") @Min(1) long id,
       @RequestHeader("Authorization") String header) {
     return inputMessageService.getMessageById(id, header);
+  }
+
+  @Operation(summary = "更新消息文档用途", description = "仅允许消息所有者修改文档用途分类")
+  @RequestMapping(value = "/messages/{id}/purpose", method = RequestMethod.PUT)
+  public JsonResult<?> updateMessagePurpose(@PathVariable("id") @Min(1) long id,
+      @RequestParam("documentPurpose") String documentPurpose,
+      @RequestHeader("Authorization") String header) {
+    return inputMessageService.updateMessagePurpose(id, documentPurpose, header);
   }
 
   @Operation(summary = "删除输入消息", description = "仅允许消息所有者删除自己的消息")

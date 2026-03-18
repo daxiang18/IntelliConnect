@@ -46,6 +46,9 @@ public class InputMessageEntity {
   private Long processingStartedAt;
   private String processingAttemptToken;
   private int processingAttemptCount;
+  private String documentPurpose;
+  private String contentCategory;
+  private String contentTags;
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -249,6 +252,36 @@ public class InputMessageEntity {
     this.processingAttemptCount = processingAttemptCount;
   }
 
+  @Basic
+  @Column(name = "document_purpose", length = 64)
+  public String getDocumentPurpose() {
+    return documentPurpose;
+  }
+
+  public void setDocumentPurpose(String documentPurpose) {
+    this.documentPurpose = documentPurpose;
+  }
+
+  @Basic
+  @Column(name = "content_category", length = 64)
+  public String getContentCategory() {
+    return contentCategory;
+  }
+
+  public void setContentCategory(String contentCategory) {
+    this.contentCategory = contentCategory;
+  }
+
+  @Basic
+  @Column(name = "content_tags", length = 512)
+  public String getContentTags() {
+    return contentTags;
+  }
+
+  public void setContentTags(String contentTags) {
+    this.contentTags = contentTags;
+  }
+
   @Override
   public boolean equals(Object o) {
     if (this == o)
@@ -270,7 +303,10 @@ public class InputMessageEntity {
         && Objects.equals(externalReferencesJson, that.externalReferencesJson)
         && Objects.equals(processingStartedAt, that.processingStartedAt)
         && Objects.equals(processingAttemptToken, that.processingAttemptToken)
-        && processingAttemptCount == that.processingAttemptCount;
+        && processingAttemptCount == that.processingAttemptCount
+        && Objects.equals(documentPurpose, that.documentPurpose)
+        && Objects.equals(contentCategory, that.contentCategory)
+        && Objects.equals(contentTags, that.contentTags);
   }
 
   @Override
@@ -278,6 +314,6 @@ public class InputMessageEntity {
     return Objects.hash(id, sourceType, sourceAccountId, sessionId, senderId, contentType, rawContent,
         normalizedContent, attachmentsJson, dedupeKey, status, receivedAt, createdBy, syncTargets,
         syncStatus, syncedAt, externalReferencesJson, processingStartedAt, processingAttemptToken,
-        processingAttemptCount);
+        processingAttemptCount, documentPurpose, contentCategory, contentTags);
   }
 }

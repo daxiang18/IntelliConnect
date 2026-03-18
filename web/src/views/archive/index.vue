@@ -8,6 +8,17 @@
       </a-button>
     </div>
 
+    <!-- 文档用途 Tabs -->
+    <div class="archive-purpose-tabs">
+      <a-tabs v-model:activeKey="activePurpose" @change="handlePurposeChange" size="small">
+        <a-tab-pane key="" tab="全部" />
+        <a-tab-pane key="quick_capture" tab="速记" />
+        <a-tab-pane key="study_doc" tab="学习文档" />
+        <a-tab-pane key="work_doc" tab="工作文档" />
+        <a-tab-pane key="life_record" tab="生活记录" />
+      </a-tabs>
+    </div>
+
     <!-- 搜索栏 -->
     <div class="archive-search">
       <a-space :size="12" wrap>
@@ -82,6 +93,9 @@
                 <a-tag :color="statusColor(msg.status)" size="small">
                   {{ statusLabel(msg.status) }}
                 </a-tag>
+                <a-tag v-if="msg.documentPurpose" :color="purposeColor(msg.documentPurpose)" size="small">
+                  {{ purposeLabel(msg.documentPurpose) }}
+                </a-tag>
               </div>
               <div class="archive-header-right">
                 <span class="archive-time">{{ formatTime(msg.receivedAt) }}</span>
@@ -150,6 +164,7 @@ const currentPage = ref(1)
 const pageSize = ref(20)
 const keyword = ref('')
 const expandedIds = ref(new Set())
+const activePurpose = ref('')
 
 const filters = reactive({
   contentType: undefined,
@@ -169,6 +184,7 @@ const fetchMessages = async () => {
     if (filters.status) params.status = filters.status
     if (filters.contentType) params.contentType = filters.contentType
     if (keyword.value.trim()) params.keyword = keyword.value.trim()
+    if (activePurpose.value) params.documentPurpose = activePurpose.value
 
     const res = await getArchivedMessages(params)
     const { data, errorCode } = res.data
@@ -195,6 +211,11 @@ const handleSearch = () => {
 }
 
 const handleFilterChange = () => {
+  currentPage.value = 1
+  fetchMessages()
+}
+
+const handlePurposeChange = () => {
   currentPage.value = 1
   fetchMessages()
 }
@@ -244,6 +265,16 @@ const statusLabel = (status) => {
   return labels[status] || status || '未知'
 }
 
+const purposeColor = (purpose) => {
+  const colors = { quick_capture: 'gold', study_doc: 'purple', work_doc: 'geekblue', life_record: 'cyan' }
+  return colors[purpose] || 'default'
+}
+
+const purposeLabel = (purpose) => {
+  const labels = { quick_capture: '速记', study_doc: '学习', work_doc: '工作', life_record: '生活' }
+  return labels[purpose] || purpose || ''
+}
+
 const formatTime = (timestamp) => {
   if (!timestamp) return ''
   const d = new Date(timestamp)
@@ -277,6 +308,10 @@ onMounted(() => {
 .archive-header h2 {
   margin: 0;
   font-size: 20px;
+}
+
+.archive-purpose-tabs {
+  margin-bottom: 12px;
 }
 
 .archive-search {

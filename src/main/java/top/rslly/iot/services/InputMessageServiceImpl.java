@@ -453,8 +453,20 @@ public class InputMessageServiceImpl implements InputMessageService {
   }
 
   private InputMessageResponse toResponse(InputMessageEntity entity) {
-    InputContentAutoTagger.AutoTagResult autoTagResult =
-        resolveAutoTagResult(entity.getContentType(), entity.getRawContent(), entity.getNormalizedContent());
+    // Use persisted category/tags if available, fallback to re-computing for old data
+    String persistedCategory = entity.getContentCategory();
+    String persistedTags = entity.getContentTags();
+    String category;
+    List<String> tags;
+    if (persistedCategory != null && !persistedCategory.isBlank()) {
+      category = persistedCategory;
+      tags = inputContentAutoTagger.parseTags(persistedTags);
+    } else {
+      InputContentAutoTagger.AutoTagResult autoTagResult =
+          resolveAutoTagResult(entity.getContentType(), entity.getRawContent(), entity.getNormalizedContent());
+      category = autoTagResult.category();
+      tags = autoTagResult.tags();
+    }
     String syncTargets = entity.getSyncTargets();
     Long processingStartedAt = entity.getProcessingStartedAt();
     if (STATUS_PROCESSING.equals(entity.getStatus()) && processingStartedAt == null) {
@@ -481,9 +493,10 @@ public class InputMessageServiceImpl implements InputMessageService {
     response.setSyncStatus(resolveSyncStatus(syncTargets, entity.getSyncStatus()));
     response.setSyncedAt(entity.getSyncedAt());
     response.setExternalReferencesJson(entity.getExternalReferencesJson());
-    response.setCategory(autoTagResult.category());
-    response.setTags(autoTagResult.tags());
+    response.setCategory(category);
+    response.setTags(tags);
     response.setProcessingAttemptCount(entity.getProcessingAttemptCount());
+    response.setDocumentPurpose(entity.getDocumentPurpose());
     return response;
   }
 
@@ -562,6 +575,15 @@ public class InputMessageServiceImpl implements InputMessageService {
     entity.setSyncedAt(null);
     entity.setExternalReferencesJson(null);
 
+    // Set documentPurpose from request
+    entity.setDocumentPurpose(inputMessageCreateParam.getDocumentPurpose());
+
+    // Persist auto-tag results at creation time
+    InputContentAutoTagger.AutoTagResult createAutoTag = resolveAutoTagResult(
+        entity.getContentType(), entity.getRawContent(), entity.getNormalizedContent());
+    entity.setContentCategory(createAutoTag.category());
+    entity.setContentTags(String.join(",", createAutoTag.tags()));
+
     InputMessageEntity savedEntity = inputMessageRepository.save(entity);
     log.info("input message created, id={}, dedupeKey={}, sessionId={}, contentType={}, syncTargets={}, user={}",
         savedEntity.getId(), savedEntity.getDedupeKey(), savedEntity.getSessionId(), savedEntity.getContentType(),
@@ -630,6 +652,14 @@ public class InputMessageServiceImpl implements InputMessageService {
 
         InputContentAutoTagger.AutoTagResult autoTagResult =
             resolveAutoTagResult(contentType, rawContent, contentToIngest);
+
+        // Persist updated category/tags after content enrichment
+        inputMessageRepository.findById(id).ifPresent(freshEntity -> {
+          freshEntity.setContentCategory(autoTagResult.category());
+          freshEntity.setContentTags(String.join(",", autoTagResult.tags()));
+          inputMessageRepository.save(freshEntity);
+        });
+
         Map<String, String> metadata = new HashMap<>();
         metadata.put("sessionId", sessionId);
         metadata.put("dedupeKey", dedupeKey);
@@ -637,6 +667,10 @@ public class InputMessageServiceImpl implements InputMessageService {
         metadata.put("contentType", contentType == null ? CONTENT_TYPE_TEXT : contentType);
         metadata.put("contentCategory", autoTagResult.category());
         metadata.put("contentTags", String.join(",", autoTagResult.tags()));
+        metadata.put("documentType", "personal_input");
+        if (entity.getDocumentPurpose() != null && !entity.getDocumentPurpose().isBlank()) {
+          metadata.put("documentPurpose", entity.getDocumentPurpose());
+        }
         if (entity.getSyncTargets() != null && !entity.getSyncTargets().isBlank()) {
           metadata.put("syncTargets", entity.getSyncTargets());
         }
@@ -1078,7 +1112,7 @@ public class InputMessageServiceImpl implements InputMessageService {
   @Override
   public JsonResult<?> listMessages(String sourceType, String status, String contentType,
       String keyword, Boolean archived, Long startTime, Long endTime,
-      Integer page, Integer size, String token) {
+      String documentPurpose, Integer page, Integer size, String token) {
     String username;
     try {
       username = resolveUsername(token);
@@ -1097,12 +1131,14 @@ public class InputMessageServiceImpl implements InputMessageService {
     String cntType = (contentType != null && !contentType.isBlank()) ? contentType : null;
     String kw = (keyword != null && !keyword.isBlank()) ? keyword : null;
     boolean archivedOnly = Boolean.TRUE.equals(archived);
+    String docPurpose = (documentPurpose != null && !documentPurpose.isBlank()) ? documentPurpose : null;
 
     Page<InputMessageEntity> result = inputMessageRepository.searchMessages(
-        username, srcType, sts, cntType, kw, archivedOnly, startTime, endTime, pageable);
+        username, srcType, sts, cntType, kw, archivedOnly, startTime, endTime, docPurpose, pageable);
 
     JSONObject data = new JSONObject();
-    data.put("content", result.getContent());
+    data.put("content", result.getContent().stream().map(this::toResponse)
+        .collect(Collectors.toList()));
     data.put("totalElements", result.getTotalElements());
     data.put("totalPages", result.getTotalPages());
     data.put("page", result.getNumber());
@@ -1144,6 +1180,16 @@ public class InputMessageServiceImpl implements InputMessageService {
     }
     data.put("bySource", bySource);
 
+    // 按文档用途分组
+    List<Object[]> purposeCounts = inputMessageRepository.countByDocumentPurposeGrouped(username);
+    JSONObject byPurpose = new JSONObject();
+    for (Object[] row : purposeCounts) {
+      String purposeKey = (String) row[0];
+      Long count = (Long) row[1];
+      byPurpose.put(purposeKey != null ? purposeKey : "unknown", count);
+    }
+    data.put("byPurpose", byPurpose);
+
     data.put("total", totalCount);
     return ResultTool.success(data);
   }
@@ -1166,7 +1212,33 @@ public class InputMessageServiceImpl implements InputMessageService {
     if (!username.equals(msg.getCreatedBy())) {
       return ResultTool.fail(ResultCode.NO_PERMISSION);
     }
-    return ResultTool.success(msg);
+    return ResultTool.success(toResponse(msg));
+  }
+
+  @Override
+  @Transactional
+  public JsonResult<?> updateMessagePurpose(long id, String documentPurpose, String token) {
+    String username;
+    try {
+      username = resolveUsername(token);
+    } catch (Exception e) {
+      log.warn("update message purpose failed to parse token", e);
+      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
+    }
+
+    var optMsg = inputMessageRepository.findById(id);
+    if (optMsg.isEmpty()) {
+      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
+    }
+    InputMessageEntity msg = optMsg.get();
+    if (!username.equals(msg.getCreatedBy())) {
+      return ResultTool.fail(ResultCode.NO_PERMISSION);
+    }
+
+    msg.setDocumentPurpose(documentPurpose);
+    inputMessageRepository.save(msg);
+    log.info("Message purpose updated: id={}, documentPurpose={}, createdBy={}", id, documentPurpose, username);
+    return ResultTool.success(toResponse(msg));
   }
 
   @Override

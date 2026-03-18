@@ -45,6 +45,7 @@ public class InputMessageEntity {
   private String externalReferencesJson;
   private Long processingStartedAt;
   private String processingAttemptToken;
+  @Column(columnDefinition = "int default 0")
   private int processingAttemptCount;
   private String documentPurpose;
   private String contentCategory;

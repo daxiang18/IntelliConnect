@@ -47,4 +47,7 @@ public class InputMessageResponse {
   private String category;
   private List<String> tags;
   private String documentPurpose;
+  private String aiSummary;
+  private String todosJson;
+  private String entitiesJson;
 }

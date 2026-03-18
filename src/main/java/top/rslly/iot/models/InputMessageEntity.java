@@ -49,6 +49,9 @@ public class InputMessageEntity {
   private String documentPurpose;
   private String contentCategory;
   private String contentTags;
+  private String aiSummary;
+  private String todosJson;
+  private String entitiesJson;
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -282,6 +285,36 @@ public class InputMessageEntity {
     this.contentTags = contentTags;
   }
 
+  @Basic
+  @Column(name = "ai_summary", columnDefinition = "TEXT")
+  public String getAiSummary() {
+    return aiSummary;
+  }
+
+  public void setAiSummary(String aiSummary) {
+    this.aiSummary = aiSummary;
+  }
+
+  @Basic
+  @Column(name = "todos_json", columnDefinition = "TEXT")
+  public String getTodosJson() {
+    return todosJson;
+  }
+
+  public void setTodosJson(String todosJson) {
+    this.todosJson = todosJson;
+  }
+
+  @Basic
+  @Column(name = "entities_json", columnDefinition = "TEXT")
+  public String getEntitiesJson() {
+    return entitiesJson;
+  }
+
+  public void setEntitiesJson(String entitiesJson) {
+    this.entitiesJson = entitiesJson;
+  }
+
   @Override
   public boolean equals(Object o) {
     if (this == o)
@@ -306,7 +339,10 @@ public class InputMessageEntity {
         && processingAttemptCount == that.processingAttemptCount
         && Objects.equals(documentPurpose, that.documentPurpose)
         && Objects.equals(contentCategory, that.contentCategory)
-        && Objects.equals(contentTags, that.contentTags);
+        && Objects.equals(contentTags, that.contentTags)
+        && Objects.equals(aiSummary, that.aiSummary)
+        && Objects.equals(todosJson, that.todosJson)
+        && Objects.equals(entitiesJson, that.entitiesJson);
   }
 
   @Override
@@ -314,6 +350,7 @@ public class InputMessageEntity {
     return Objects.hash(id, sourceType, sourceAccountId, sessionId, senderId, contentType, rawContent,
         normalizedContent, attachmentsJson, dedupeKey, status, receivedAt, createdBy, syncTargets,
         syncStatus, syncedAt, externalReferencesJson, processingStartedAt, processingAttemptToken,
-        processingAttemptCount, documentPurpose, contentCategory, contentTags);
+        processingAttemptCount, documentPurpose, contentCategory, contentTags,
+        aiSummary, todosJson, entitiesJson);
   }
 }

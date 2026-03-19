@@ -32,6 +32,7 @@ import top.rslly.iot.services.agent.AiServiceImpl;
 import top.rslly.iot.services.knowledgeGraphic.KnowledgeGraphicService;
 import top.rslly.iot.services.hub.HubPersonaServiceImpl;
 import top.rslly.iot.services.hub.HubPipelineConfigServiceImpl;
+import top.rslly.iot.utility.JwtTokenUtil;
 import top.rslly.iot.utility.result.JsonResult;
 import top.rslly.iot.utility.result.ResultCode;
 import top.rslly.iot.utility.result.ResultTool;
@@ -434,6 +435,46 @@ public class HubTool {
     return productLlmModelService.deleteProductLlmModel(id);
   }
 
+  // ── Hub LLM Model ───────────────────────────────────────────────────────────
+
+  @Operation(summary = "获取个人中枢模型配置", description = "获取个人中枢入口使用的模型配置（固定 productId=0）")
+  @RequestMapping(value = "/hub/model", method = RequestMethod.GET)
+  public JsonResult<?> getHubLlmModel(@RequestHeader("Authorization") String header) {
+    return productLlmModelService.getProductLlmModelByProductId(0);
+  }
+
+  @Operation(summary = "创建或更新个人中枢模型配置", description = "创建或更新个人中枢入口使用的模型配置（固定 productId=0）")
+  @RequestMapping(value = "/hub/model", method = RequestMethod.POST)
+  public JsonResult<?> postHubLlmModel(
+      @Valid @RequestBody ProductLlmModel productLlmModel,
+      @RequestHeader("Authorization") String header) {
+    productLlmModel.setProductId(0);
+    try {
+      if (!safetyService.controlAuthorizeLlmProviderInformation(header, productLlmModel.getProviderId()))
+        return ResultTool.fail(ResultCode.NO_PERMISSION);
+    } catch (NullPointerException e) {
+      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
+    }
+    return productLlmModelService.postProductLlmModel(productLlmModel);
+  }
+
+  @Operation(summary = "删除个人中枢模型配置", description = "根据ID删除个人中枢入口使用的模型配置")
+  @RequestMapping(value = "/hub/model", method = RequestMethod.DELETE)
+  public JsonResult<?> deleteHubLlmModel(@RequestParam("id") int id,
+      @RequestHeader("Authorization") String header) {
+    var models = productLlmModelService.findAllById(id);
+    if (models.isEmpty() || models.get(0).getProductId() != 0) {
+      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
+    }
+    try {
+      if (!safetyService.controlAuthorizeLlmProviderInformation(header, models.get(0).getProviderId()))
+        return ResultTool.fail(ResultCode.NO_PERMISSION);
+    } catch (NullPointerException e) {
+      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
+    }
+    return productLlmModelService.deleteProductLlmModel(id);
+  }
+
   // ── Product Skills ──────────────────────────────────────────────────────────
 
   @Operation(summary = "获取产品技能", description = "获取产品技能列表")
@@ -473,10 +514,24 @@ public class HubTool {
 
   // ── Knowledge Graph ─────────────────────────────────────────────────────────
 
-  @Operation(summary = "获取知识图谱", description = "通过产品ID获取该产品的知识图谱")
+  @Operation(summary = "获取知识图谱",
+      description = "通过产品ID获取该产品的知识图谱；productId=-1 时返回个人中枢的分类/标签图谱")
   @RequestMapping(value = "/kg/graphic", method = RequestMethod.GET)
   public JsonResult<?> getKnowledgeGraphic(@RequestParam("productId") int productId,
       @RequestHeader("Authorization") String header) {
+    if (productId == -1) {
+      // 个人中枢知识图谱：基于用户的 InputMessage 分类/标签构造
+      try {
+        String tokenDeal = header.replace(JwtTokenUtil.TOKEN_PREFIX, "");
+        String username = JwtTokenUtil.getUsername(tokenDeal);
+        if (username == null) {
+          return ResultTool.fail(ResultCode.NO_PERMISSION);
+        }
+        return knowledgeGraphicService.getHubPersonalGraphic(username);
+      } catch (Exception e) {
+        return ResultTool.fail(ResultCode.NO_PERMISSION);
+      }
+    }
     try {
       if (!safetyService.controlAuthorizeProduct(header, productId))
         return ResultTool.fail(ResultCode.NO_PERMISSION);
@@ -703,42 +758,25 @@ public class HubTool {
 
   // ── Hub Persona (AI 人设配置) ───────────────────────────────────────────────
 
-  @Operation(summary = "获取AI人设列表", description = "获取指定产品的AI人设列表")
+  @Operation(summary = "获取AI人设列表", description = "获取个人中枢的AI人设列表（固定 productId=0）")
   @RequestMapping(value = "/hub/persona", method = RequestMethod.GET)
-  public JsonResult<?> getHubPersona(@RequestParam("productId") int productId,
-      @RequestHeader("Authorization") String header) {
-    try {
-      if (!safetyService.controlAuthorizeProduct(header, productId))
-        return ResultTool.fail(ResultCode.NO_PERMISSION);
-    } catch (NullPointerException e) {
-      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
-    }
-    return hubPersonaService.getPersonaByProductId(productId);
+  public JsonResult<?> getHubPersona(@RequestHeader("Authorization") String header) {
+    return hubPersonaService.getPersonaByProductId(0);
   }
 
-  @Operation(summary = "创建AI人设", description = "创建新的AI人设配置")
+  @Operation(summary = "创建AI人设", description = "创建新的AI人设配置（固定 productId=0）")
   @RequestMapping(value = "/hub/persona", method = RequestMethod.POST)
   public JsonResult<?> postHubPersona(@Valid @RequestBody HubPersona hubPersona,
       @RequestHeader("Authorization") String header) {
-    try {
-      if (!safetyService.controlAuthorizeProduct(header, hubPersona.getProductId()))
-        return ResultTool.fail(ResultCode.NO_PERMISSION);
-    } catch (NullPointerException e) {
-      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
-    }
+    hubPersona.setProductId(0);
     return hubPersonaService.createPersona(hubPersona);
   }
 
-  @Operation(summary = "更新AI人设", description = "更新已有的AI人设配置")
+  @Operation(summary = "更新AI人设", description = "更新已有的AI人设配置（固定 productId=0）")
   @RequestMapping(value = "/hub/persona", method = RequestMethod.PUT)
   public JsonResult<?> putHubPersona(@Valid @RequestBody HubPersona hubPersona,
       @RequestHeader("Authorization") String header) {
-    try {
-      if (!safetyService.controlAuthorizeProduct(header, hubPersona.getProductId()))
-        return ResultTool.fail(ResultCode.NO_PERMISSION);
-    } catch (NullPointerException e) {
-      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
-    }
+    hubPersona.setProductId(0);
     return hubPersonaService.updatePersona(hubPersona);
   }
 
@@ -751,42 +789,25 @@ public class HubTool {
 
   // ── Hub Pipeline Config (处理逻辑配置) ────────────────────────────────────
 
-  @Operation(summary = "获取处理逻辑配置", description = "获取指定产品的处理流水线配置")
+  @Operation(summary = "获取处理逻辑配置", description = "获取个人中枢的处理流水线配置（固定 productId=0）")
   @RequestMapping(value = "/hub/pipeline", method = RequestMethod.GET)
-  public JsonResult<?> getHubPipeline(@RequestParam("productId") int productId,
-      @RequestHeader("Authorization") String header) {
-    try {
-      if (!safetyService.controlAuthorizeProduct(header, productId))
-        return ResultTool.fail(ResultCode.NO_PERMISSION);
-    } catch (NullPointerException e) {
-      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
-    }
-    return hubPipelineConfigService.getConfigByProductId(productId);
+  public JsonResult<?> getHubPipeline(@RequestHeader("Authorization") String header) {
+    return hubPipelineConfigService.getConfigByProductId(0);
   }
 
-  @Operation(summary = "创建处理逻辑配置", description = "创建新的处理流水线配置")
+  @Operation(summary = "创建处理逻辑配置", description = "创建新的处理流水线配置（固定 productId=0）")
   @RequestMapping(value = "/hub/pipeline", method = RequestMethod.POST)
   public JsonResult<?> postHubPipeline(@Valid @RequestBody HubPipelineConfig hubPipelineConfig,
       @RequestHeader("Authorization") String header) {
-    try {
-      if (!safetyService.controlAuthorizeProduct(header, hubPipelineConfig.getProductId()))
-        return ResultTool.fail(ResultCode.NO_PERMISSION);
-    } catch (NullPointerException e) {
-      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
-    }
+    hubPipelineConfig.setProductId(0);
     return hubPipelineConfigService.createConfig(hubPipelineConfig);
   }
 
-  @Operation(summary = "更新处理逻辑配置", description = "更新已有的处理流水线配置")
+  @Operation(summary = "更新处理逻辑配置", description = "更新已有的处理流水线配置（固定 productId=0）")
   @RequestMapping(value = "/hub/pipeline", method = RequestMethod.PUT)
   public JsonResult<?> putHubPipeline(@Valid @RequestBody HubPipelineConfig hubPipelineConfig,
       @RequestHeader("Authorization") String header) {
-    try {
-      if (!safetyService.controlAuthorizeProduct(header, hubPipelineConfig.getProductId()))
-        return ResultTool.fail(ResultCode.NO_PERMISSION);
-    } catch (NullPointerException e) {
-      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
-    }
+    hubPipelineConfig.setProductId(0);
     return hubPipelineConfigService.updateConfig(hubPipelineConfig);
   }
 }

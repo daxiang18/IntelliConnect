@@ -24,7 +24,6 @@ import dev.langchain4j.data.document.Metadata;
 import dev.langchain4j.data.embedding.Embedding;
 import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.model.embedding.EmbeddingModel;
-import dev.langchain4j.model.output.Response;
 import dev.langchain4j.store.embedding.EmbeddingMatch;
 import dev.langchain4j.store.embedding.EmbeddingSearchRequest;
 import dev.langchain4j.store.embedding.EmbeddingSearchResult;
@@ -35,26 +34,31 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.w3c.dom.Text;
 import top.rslly.iot.dao.KnowledgeGraphicAttributeRepository;
 import top.rslly.iot.dao.KnowledgeGraphicNodeRepository;
 import top.rslly.iot.dao.KnowledgeGraphicRelationRepository;
+import top.rslly.iot.dao.InputMessageRepository;
 import top.rslly.iot.models.KnowledgeGraphicAttributeEntity;
 import top.rslly.iot.models.KnowledgeGraphicNodeEntity;
 import top.rslly.iot.models.KnowledgeGraphicRelationEntity;
 import top.rslly.iot.param.request.KnowledgeGraphicAttribute;
 import top.rslly.iot.param.request.KnowledgeGraphicNode;
 import top.rslly.iot.param.request.KnowledgeGraphicRelation;
-import top.rslly.iot.param.request.MetaData;
 import top.rslly.iot.services.knowledgeGraphic.dbo.KnowledgeGraphic;
 import top.rslly.iot.utility.result.JsonResult;
 import top.rslly.iot.utility.result.ResultCode;
 import top.rslly.iot.utility.result.ResultTool;
-import static dev.langchain4j.store.embedding.filter.MetadataFilterBuilder.metadataKey;
 
-import java.util.*;
-import java.util.stream.Collector;
-import java.util.stream.Collectors;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.Stack;
+
+import static dev.langchain4j.store.embedding.filter.MetadataFilterBuilder.metadataKey;
 
 @Service
 @Slf4j
@@ -67,6 +71,9 @@ public class KnowledgeGraphicServiceImpl implements KnowledgeGraphicService {
 
   @Autowired
   private KnowledgeGraphicRelationRepository knowledgeGraphicRelationRepository;
+
+  @Autowired
+  private InputMessageRepository inputMessageRepository;
 
   @Autowired
   private EmbeddingModel embeddingModel;
@@ -146,7 +153,6 @@ public class KnowledgeGraphicServiceImpl implements KnowledgeGraphicService {
       return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
     }
     if (maxDepth >= 20) {
-      // Too deep will cause performance problem.
       return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
     }
     KnowledgeGraphic knowledgeGraphic = new KnowledgeGraphic();
@@ -164,7 +170,6 @@ public class KnowledgeGraphicServiceImpl implements KnowledgeGraphicService {
             knowledgeGraphicRelationRepository.getAllByFrom(node.getId());
         for (KnowledgeGraphicRelationEntity relation : relationList) {
           KnowledgeGraphicNodeEntity to = this.getNodeById(relation.getTo());
-          // Null is not on consideration, cause relation must with from and to
           nextNodeList.add(to);
           knowledgeGraphic.addRelation(node.getName(), relation.getDes(), to.getName());
         }
@@ -369,15 +374,11 @@ public class KnowledgeGraphicServiceImpl implements KnowledgeGraphicService {
   @Deprecated
   @Transactional(rollbackFor = Exception.class)
   public JsonResult<?> deleteNode(String name) {
-    // Don't use this method unless you can make sure there is only node named what you want to
-    // delete.
     KnowledgeGraphicNodeEntity node = knowledgeGraphicNodeRepository.findByName(name);
     if (node == null) {
       return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
     }
     knowledgeGraphicNodeRepository.delete(node);
-    // Relation must with from and to, whatever witch of them was deleted, the relation must be
-    // deleted.
     knowledgeGraphicRelationRepository.deleteAllByFrom(node.getId());
     knowledgeGraphicRelationRepository.deleteAllByTo(node.getId());
     knowledgeGraphicAttributeRepository.deleteByBelong(node.getId());
@@ -455,7 +456,6 @@ public class KnowledgeGraphicServiceImpl implements KnowledgeGraphicService {
   @Override
   @Transactional(rollbackFor = Exception.class)
   public JsonResult<?> updateNode(KnowledgeGraphicNode node) {
-    // When updating node, you must supply node id!
     if (node.getId() <= 0)
       return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
     KnowledgeGraphicNodeEntity nodeDb = this.getNodeById(node.getId());
@@ -595,8 +595,6 @@ public class KnowledgeGraphicServiceImpl implements KnowledgeGraphicService {
   @Deprecated
   @Transactional(rollbackFor = Exception.class)
   public JsonResult<?> deleteAttribute(String name) {
-    // Don't use this method unless you can make sure there is only attribute named what you want to
-    // delete.
     knowledgeGraphicAttributeRepository.deleteAllByName(name);
     return ResultTool.success();
   }
@@ -672,29 +670,80 @@ public class KnowledgeGraphicServiceImpl implements KnowledgeGraphicService {
   }
 
   /**
+   * 个人中枢知识图谱：固定包含“个人中枢”根节点，并按归档分类组织标签。
+   */
+  @Override
+  public JsonResult<?> getHubPersonalGraphic(String username) {
+    KnowledgeGraphic graph = new KnowledgeGraphic();
+    String hubRoot = "个人中枢";
+    graph.addNode(hubRoot, "个人中枢归档总览");
+
+    List<Object[]> categoryRows = inputMessageRepository.countByCategoryGrouped(username);
+    Map<String, Long> categoryCountMap = new LinkedHashMap<>();
+    for (Object[] row : categoryRows) {
+      String category = (String) row[0];
+      Long count = (Long) row[1];
+      if (category != null && !category.isBlank()) {
+        categoryCountMap.put(category, count);
+      }
+    }
+
+    Map<String, Set<String>> categoryTagsMap = new LinkedHashMap<>();
+    List<Object[]> categoryTagRows = inputMessageRepository.findCategoryAndTagsByCreatedBy(username);
+    for (Object[] row : categoryTagRows) {
+      String category = (String) row[0];
+      String rawTags = (String) row[1];
+      String normalizedCategory = (category == null || category.isBlank()) ? "未分类归档" : category.trim();
+      Set<String> tags = categoryTagsMap.computeIfAbsent(normalizedCategory, key -> new LinkedHashSet<>());
+      if (rawTags == null || rawTags.isBlank()) {
+        continue;
+      }
+      for (String tag : rawTags.split("[,，;；]")) {
+        String trimmed = tag.trim();
+        if (!trimmed.isEmpty()) {
+          tags.add(trimmed);
+        }
+      }
+    }
+
+    if (categoryCountMap.isEmpty() && categoryTagsMap.isEmpty()) {
+      return ResultTool.success(graph);
+    }
+
+    Set<String> orderedCategories = new LinkedHashSet<>();
+    orderedCategories.addAll(categoryCountMap.keySet());
+    orderedCategories.addAll(categoryTagsMap.keySet());
+
+    for (String category : orderedCategories) {
+      Long count = categoryCountMap.getOrDefault(category, 0L);
+      graph.addNode(category, "归档分类: " + category);
+      graph.addAttribute(category, "消息量: " + count);
+      graph.addRelation(hubRoot, "归档", category);
+
+      Set<String> tags = categoryTagsMap.getOrDefault(category, new LinkedHashSet<>());
+      for (String tag : tags) {
+        graph.addNode(tag, "标签: " + tag);
+        graph.addRelation(category, "包含", tag);
+      }
+    }
+
+    return ResultTool.success(graph);
+  }
+
+  /**
    * G4: 从消息 AI 分析结果中自动将提取的实体关联到知识图谱。
-   * - 每个实体创建/更新为一个图谱节点
-   * - 同一消息中的实体之间建立"共现"关系
-   * - 使用固定 productId=0 表示个人中枢知识图谱空间
-   *
-   * @param entities  AI 提取的实体名称列表（最多 5 个）
-   * @param messageId 来源消息 ID
-   * @param summary   消息摘要（作为节点描述补充）
    */
   public void autoLinkFromMessage(List<String> entities, long messageId, String summary) {
     if (entities == null || entities.isEmpty()) {
       return;
     }
 
-    int hubProductId = 0; // 个人中枢专用 productId
+    int hubProductId = 0;
     String description = summary != null ? summary : "来自消息 #" + messageId;
-
-    // 限制每条消息最多 5 个实体
     List<String> limited = entities.size() > 5 ? entities.subList(0, 5) : entities;
 
-    // 1. 为每个实体创建/更新节点
-    List<Long> nodeIds = new java.util.ArrayList<>();
-    List<String> nodeNames = new java.util.ArrayList<>();
+    List<Long> nodeIds = new ArrayList<>();
+    List<String> nodeNames = new ArrayList<>();
     for (String entityName : limited) {
       if (entityName == null || entityName.isBlank()) continue;
       String trimmed = entityName.trim();
@@ -709,7 +758,6 @@ public class KnowledgeGraphicServiceImpl implements KnowledgeGraphicService {
       }
     }
 
-    // 2. 建立实体间的共现关系
     if (nodeIds.size() >= 2) {
       for (int i = 0; i < nodeIds.size(); i++) {
         for (int j = i + 1; j < nodeIds.size(); j++) {

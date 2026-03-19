@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd /home/daxiang/projects/IntelliConnect && ./mvnw clean package -Dmaven.test.skip=true)",
+      "Bash(cd /home/daxiang/projects/IntelliConnect/web && npm run build)",
+      "Bash(ssh root@106.54.44.111 \"sed -n '1,220p' /opt/IntelliConnect/start.sh\")",
+      "Bash(ssh root@106.54.44.111 \"nginx -T 2>/dev/null | grep -nE 'server_name|proxy_pass|root ' | grep -A4 -B4 -E 'ic\\\\.fans\\\\.market|fu\\\\.fans\\\\.market'\")",
+      "Bash(ssh root@106.54.44.111 \"pgrep -af 'IntelliConnect-1.8-SNAPSHOT.jar' || true; ss -ltnp | grep -E ':8080|:9090' || true\")",
+      "Bash(ssh root@106.54.44.111 \"curl -I -s http://127.0.0.1:8080/ || true\")"
+    ]
+  }
+}

@@ -73,21 +73,11 @@ export default [
         },
       },
       {
-        path: '/hubPersona',
-        name: 'hubPersona',
-        component: () => import('@/views/hubPersona/index.vue'),
+        path: '/hubSettings',
+        name: 'hubSettings',
+        component: () => import('@/views/hubSettings/index.vue'),
         meta: {
-          title: 'hubPersona',
-          auth: ['[ROLE_admin]', '[ROLE_guest]', '[ROLE_wx_user]'],
-          domain: 'hub',
-        },
-      },
-      {
-        path: '/hubPipeline',
-        name: 'hubPipeline',
-        component: () => import('@/views/hubPipeline/index.vue'),
-        meta: {
-          title: 'hubPipeline',
+          title: 'hubSettings',
           auth: ['[ROLE_admin]', '[ROLE_guest]', '[ROLE_wx_user]'],
           domain: 'hub',
         },

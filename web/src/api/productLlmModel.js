@@ -2,29 +2,71 @@ import request from '@/utils/request'
 import store from '@/store'
 
 const token = store.getters['auth/token']
-export const getProductLlmModel = (data) =>
+
+export const getProductLlmModel = () =>
   request({
     url: '/api/v2/productLlmModel',
     method: 'get',
     headers: {
-        'Authorization': token
-      }
+      Authorization: token,
+    },
   })
-  export const postProductLlmModel = (data) =>
-    request({
-      url: '/api/v2/productLlmModel',
-      method: 'post',
-      headers: {
-        'Authorization': token
-      },
-      data
-    })
-  export const deleteProductLlmModel = (params) =>
-      request({
-        url: '/api/v2/productLlmModel',
-        method: 'delete',
-        headers: {
-          'Authorization': token
-        },
-        params
-    })
+
+export const getProductLlmModelByProductId = (params) =>
+  request({
+    url: '/api/v2/productLlmModelByProductId',
+    method: 'get',
+    params,
+    headers: {
+      Authorization: token,
+    },
+  })
+
+export const getHubLlmModel = () =>
+  request({
+    url: '/api/v2/hub/model',
+    method: 'get',
+    headers: {
+      Authorization: token,
+    },
+  })
+
+export const postHubLlmModel = (data) =>
+  request({
+    url: '/api/v2/hub/model',
+    method: 'post',
+    data,
+    headers: {
+      Authorization: token,
+    },
+  })
+
+export const deleteHubLlmModel = (params) =>
+  request({
+    url: '/api/v2/hub/model',
+    method: 'delete',
+    params,
+    headers: {
+      Authorization: token,
+    },
+  })
+
+export const postProductLlmModel = (data) =>
+  request({
+    url: '/api/v2/productLlmModel',
+    method: 'post',
+    headers: {
+      Authorization: token,
+    },
+    data,
+  })
+
+export const deleteProductLlmModel = (params) =>
+  request({
+    url: '/api/v2/productLlmModel',
+    method: 'delete',
+    headers: {
+      Authorization: token,
+    },
+    params,
+  })

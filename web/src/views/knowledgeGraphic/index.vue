@@ -40,9 +40,7 @@ const baseOption = {
       layout: 'force',
       edgeSymbol: ['circle', 'arrow'],
       force: {
-        // 节点之间的斥力，值越大节点越分散，可以设置一个较大的值以避免重叠
         repulsion: 30,
-        // 是否防止节点重叠
         avoidOverlap: true,
       },
       data: [],
@@ -60,9 +58,6 @@ const baseOption = {
         position: 'right',
         formatter: '{b}',
       },
-      // labelLayout: {
-      //   hideOverlap: true
-      // },
       lineStyle: {
         color: 'source',
         curveness: 0.3,
@@ -111,18 +106,23 @@ const resizeObserver = ref(null)
 const selectedNode = ref(null)
 const showNodeInfo = ref(false)
 const graphic = ref(null)
+const showHubReadonlyInfo = ref(false)
+const hubReadonlyInfo = ref('')
 
-const products = ref([])
-const productLoading = ref(true)
+const scopes = ref([])
+const scopeLoading = ref(true)
 const currentProductId = ref(null)
 
-// Variables for handling relation
 const isConnection = ref(false)
 const relationTemp = ref([])
 const relationConfigToggle = ref(false)
 const createRelationFlag = ref(false)
 
-function fetchProducts() {
+function isHubScope(value) {
+  return value === -1
+}
+
+function fetchScopes() {
   getProduct().then((res) => {
     const { data, errorCode } = res.data
     if (errorCode === 2001) {
@@ -130,23 +130,20 @@ function fetchProducts() {
       return
     }
     if (errorCode === 200 && data && Array.isArray(data)) {
-      products.value = data.map((item, index) => {
-        return {
+      scopes.value = [
+        { key: -1, value: -1, label: '个人中枢 / 归档分类' },
+        ...data.map((item) => ({
           key: item.id,
           value: item.id,
           label: item.productName,
-        }
-      })
-      productLoading.value = false
-      currentProductId.value = data.length > 0 ? data[0].id : null
-      if (currentProductId.value !== null) {
-        getCurrentKnowledgeGraphicState()
-        getCurrentKnowledgeGraphic()
-      }
+        })),
+      ]
     } else {
-      products.value = []
-      productLoading.value = false
+      scopes.value = [{ key: -1, value: -1, label: '个人中枢 / 归档分类' }]
     }
+    scopeLoading.value = false
+    currentProductId.value = -1
+    getCurrentKnowledgeGraphic()
   })
 }
 
@@ -198,8 +195,8 @@ function handleAddNewNode() {
 function handleStartConnecting(e) {
   if (e.key !== 'c' || showNodeInfo.value) return
   if (isAddingNode.value || relationConfigToggle.value) return
+  if (isHubScope(currentProductId.value)) return
   e.preventDefault()
-  // Caution about this! Use relationConfigToggle to debounce!
   if (!isConnection.value && !relationConfigToggle.value) {
     isConnection.value = true
     relationTemp.value = []
@@ -221,7 +218,7 @@ function handleCancelConnecting(e) {
   }
 }
 
-function handleConnectingToggle(checked, e) {
+function handleConnectingToggle(checked) {
   isConnection.value = checked
   if (relationTemp.value.length !== 0) {
     const option = { ...crtOption.value }
@@ -244,7 +241,6 @@ function handleCancelConfigRelation(e) {
   relationTemp.value = []
   relationConfigToggle.value = false
   if (createRelationFlag.value) {
-    // Filter temp link
     const option = { ...crtOption.value }
     option.series[0].links = option.series[0].links.filter((item) => {
       return item.lineStyle === undefined || item.lineStyle.type !== 'dashed'
@@ -264,7 +260,6 @@ function handleSubmitConfigRelation() {
 }
 
 function handleConnected() {
-  // Add temp link on graphic and config des to post
   isConnection.value = false
   let newOption = { ...crtOption.value }
   newOption.series[0].links.push({
@@ -280,8 +275,6 @@ function handleConnected() {
     },
   })
   chart.value.setOption(newOption)
-  //   Open relation config drawer
-  // Notify component now config for adding
   createRelationFlag.value = true
   handleRelationConfig()
 }
@@ -313,10 +306,6 @@ function updateGraphicData() {
       source: item.from,
       target: item.to,
       value: item.name.length,
-      // label: {
-      //   show: true,
-      //   formatter: item.name
-      // }
     }
   })
   refreshChartHandler(option)
@@ -324,7 +313,9 @@ function updateGraphicData() {
 
 function handleProductIdChange(value) {
   currentProductId.value = value
-  getCurrentKnowledgeGraphicState()
+  if (!isHubScope(value)) {
+    getCurrentKnowledgeGraphicState()
+  }
   getCurrentKnowledgeGraphic()
 }
 
@@ -336,9 +327,10 @@ function handleRepulsionChange(value) {
 }
 
 function getCurrentKnowledgeGraphic() {
-  if (!currentProductId.value) return
+  if (currentProductId.value === null || currentProductId.value === undefined) return
   if (chart.value) chart.value.showLoading()
   showNodeInfo.value = false
+  showHubReadonlyInfo.value = false
   queryKnowledgeGraphic({ productId: currentProductId.value })
     .then((res) => {
       const { data, errorCode } = res.data
@@ -395,12 +387,24 @@ function handleNodeClick(params) {
     }
     return
   }
+  if (isHubScope(currentProductId.value)) {
+    const node = graphic.value?.nodes?.find((item) => item.name === params.name)
+    hubReadonlyInfo.value = node?.des || params.name
+    showHubReadonlyInfo.value = true
+    return
+  }
   selectedNode.value = params.name
   showNodeInfo.value = true
 }
 
 function handleEdgeClick(params) {
   if (isConnection.value) return
+  if (isHubScope(currentProductId.value)) {
+    const { data } = params
+    hubReadonlyInfo.value = data?.source && data?.target ? `${data.source} → ${data.target}` : '关系详情'
+    showHubReadonlyInfo.value = true
+    return
+  }
   const { data } = params
   relationTemp.value = [data.source, data.target]
   showNodeInfo.value = false
@@ -431,7 +435,6 @@ function refreshChartHandler(option) {
 
 function initializeCanvas() {
   if (cavDom.value) {
-    // Read initial size from parent
     const W = cavDom.value.offsetParent.offsetWidth
     const H = cavDom.value.offsetParent.offsetHeight
     cavWidth.value = W
@@ -454,17 +457,9 @@ function initializeCanvas() {
   }
 }
 
-/**
- * This method generated by Deepseek
- * @param nodes
- * @param links
- * @returns {number}
- */
 function classifyNodes(nodes, links) {
-  // 如果节点为空，直接返回0
   if (nodes.length === 0) return 0
 
-  // 构建节点名称到节点对象的映射
   const nodeMap = new Map()
   const nameToNode = new Map()
 
@@ -473,40 +468,31 @@ function classifyNodes(nodes, links) {
     nameToNode.set(node.name, node)
   })
 
-  // 构建邻接表和逆邻接表
-  const adjList = new Map() // 出边
-  const revAdjList = new Map() // 入边
-  const degrees = new Map() // 记录每个节点的总度数（入度+出度）
+  const adjList = new Map()
+  const revAdjList = new Map()
+  const degrees = new Map()
 
-  // 初始化数据结构
   nodes.forEach((node) => {
     adjList.set(node.name, new Set())
     revAdjList.set(node.name, new Set())
     degrees.set(node.name, 0)
   })
 
-  // 填充邻接表和计算度数
   links.forEach((link) => {
     if (nameToNode.has(link.from) && nameToNode.has(link.to)) {
-      // 添加出边
       adjList.get(link.from).add(link.to)
-      // 添加入边
       revAdjList.get(link.to).add(link.from)
-
-      // 更新度数
       degrees.set(link.from, degrees.get(link.from) + 1)
       degrees.set(link.to, degrees.get(link.to) + 1)
     }
   })
 
-  // 获取未分类的节点名称
   const getUnclassifiedNodes = () => {
     return Array.from(nameToNode.values())
       .filter((node) => node.category === null || node.category === undefined)
       .map((node) => node.name)
   }
 
-  // 广度优先搜索，获取3步内可达的所有节点
   const getNodesWithinThreeSteps = (startNodeName) => {
     const visited = new Set()
     const queue = [{ node: startNodeName, distance: 0 }]
@@ -518,15 +504,12 @@ function classifyNodes(nodes, links) {
 
       visited.add(node)
 
-      // 添加出边方向的邻居
       for (const neighbor of adjList.get(node) || []) {
         if (!visited.has(neighbor)) {
           queue.push({ node: neighbor, distance: distance + 1 })
         }
       }
 
-      // 添加入边方向的邻居（双向搜索，因为我们要找3次简单路径内的节点）
-      // 根据题目描述，应该是考虑所有简单路径，包括入边和出边方向
       for (const neighbor of revAdjList.get(node) || []) {
         if (!visited.has(neighbor)) {
           queue.push({ node: neighbor, distance: distance + 1 })
@@ -537,17 +520,14 @@ function classifyNodes(nodes, links) {
     return Array.from(visited)
   }
 
-  // 主要分类逻辑
   let categoryId = 0
   let unclassifiedCount = nodes.length
 
   while (unclassifiedCount > 0) {
-    // 获取所有未分类节点
     const unclassifiedNodeNames = getUnclassifiedNodes()
 
     if (unclassifiedNodeNames.length === 0) break
 
-    // 选择度数最大的未分类节点
     let maxDegree = -1
     let startNodeName = null
 
@@ -561,10 +541,8 @@ function classifyNodes(nodes, links) {
 
     if (!startNodeName) break
 
-    // 获取3步内可达的所有节点
     const nodesToClassify = getNodesWithinThreeSteps(startNodeName)
 
-    // 将这些节点标记为当前类别
     for (const nodeName of nodesToClassify) {
       const node = nameToNode.get(nodeName)
       if (node && (node.category === null || node.category === undefined)) {
@@ -576,7 +554,6 @@ function classifyNodes(nodes, links) {
     categoryId++
   }
 
-  // 返回类别数量
   return categoryId
 }
 
@@ -591,6 +568,7 @@ function removeGlobalEvent() {
 }
 
 function getCurrentKnowledgeGraphicState() {
+  if (isHubScope(currentProductId.value)) return
   getKnowledgeGraphicState({
     productId: currentProductId.value,
   }).then((res) => {
@@ -604,7 +582,7 @@ function getCurrentKnowledgeGraphicState() {
 }
 
 onMounted(() => {
-  fetchProducts()
+  fetchScopes()
   initializeCanvas()
   registerGlobalEvent()
 })
@@ -620,18 +598,18 @@ onUnmounted(() => {
     <div class="kg-main">
       <div class="kg-header">
         <div class="option-item">
-          <label class="option-label product-label" for="product">产品</label>
+          <label class="option-label scope-label" for="scope">图谱范围</label>
           <Select
-            id="product"
+            id="scope"
             class="option-main product-select"
             :value="currentProductId"
-            :options="products"
-            :loading="productLoading"
+            :options="scopes"
+            :loading="scopeLoading"
             @change="handleProductIdChange"
           >
           </Select>
         </div>
-        <div v-if="currentProductId !== null" class="option-item">
+        <div v-if="currentProductId !== null && !isHubScope(currentProductId)" class="option-item">
           <label class="option-label" for="connect-toggle"> 知识图谱自动生成开关 </label>
           <Switch
             id="connect-toggle"
@@ -642,12 +620,12 @@ onUnmounted(() => {
         <div class="option-item">
           <Button
             :type="'primary'"
-            :disabled="currentProductId === null"
+            :disabled="currentProductId === null || isHubScope(currentProductId)"
             @click="handleStartAddNewNode"
             >添加节点</Button
           >
         </div>
-        <div v-if="currentProductId !== null" class="option-item">
+        <div v-if="currentProductId !== null && !isHubScope(currentProductId)" class="option-item">
           <label class="option-label" for="connect-toggle">
             <Tooltip title="按住C键可开启，松开自动关闭"><QuestionCircleOutlined /></Tooltip>
             手动连接模式开关
@@ -660,10 +638,7 @@ onUnmounted(() => {
           />
         </div>
         <div class="option-item">
-          <Button
-            :type="'primary'"
-            :disabled="!currentProductId"
-            @click="getCurrentKnowledgeGraphic"
+          <Button :type="'primary'" :disabled="currentProductId === null" @click="getCurrentKnowledgeGraphic"
             >手动刷新数据</Button
           >
         </div>
@@ -749,6 +724,15 @@ onUnmounted(() => {
         @submit="handleSubmitConfigRelation"
       />
     </Drawer>
+    <Drawer
+      title="图谱说明"
+      :mask="false"
+      :open="showHubReadonlyInfo"
+      :width="parseInt(cavWidth / 3)"
+      @close="showHubReadonlyInfo = false"
+    >
+      <div class="hub-readonly-info">{{ hubReadonlyInfo }}</div>
+    </Drawer>
   </div>
 </template>
 
@@ -807,10 +791,10 @@ onUnmounted(() => {
 }
 
 .option-main {
-  min-width: 150px;
+  min-width: 180px;
 }
 
-.product-label:before {
+.scope-label:before {
   content: '*';
   color: red;
   margin-right: 2px;
@@ -821,5 +805,11 @@ onUnmounted(() => {
   width: 100%;
   flex-grow: 1;
   overflow: hidden;
+}
+
+.hub-readonly-info {
+  white-space: pre-wrap;
+  line-height: 1.8;
+  color: #333;
 }
 </style>

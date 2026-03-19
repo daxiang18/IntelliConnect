@@ -40,6 +40,11 @@ public interface KnowledgeGraphicService {
 
   JsonResult<?> getKnowledgeGraphicByProductId(int productId);
 
+  /**
+   * 获取个人中枢知识图谱 — 基于用户 InputMessage 的分类/标签构造图谱
+   */
+  JsonResult<?> getHubPersonalGraphic(String username);
+
   JsonResult<?> addNode(KnowledgeGraphicNodeEntity node);
 
   JsonResult<?> addNode(KnowledgeGraphicNode node);

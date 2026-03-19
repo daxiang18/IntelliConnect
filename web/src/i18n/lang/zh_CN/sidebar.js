@@ -92,6 +92,7 @@ const hubCore = {
   todoList: '待办事项',
   hubPersona: 'AI 人设配置',
   hubPipeline: '处理逻辑配置',
+  hubSettings: '中枢设置',
   messageDetail: '消息详情',
 }
 const deviceData = {

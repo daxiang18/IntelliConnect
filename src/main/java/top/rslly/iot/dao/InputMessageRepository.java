@@ -153,6 +153,16 @@ public interface InputMessageRepository extends JpaRepository<InputMessageEntity
       """)
   List<Object[]> countByCategoryGrouped(@Param("createdBy") String createdBy);
 
+  /** 按创建者查询分类与标签组合，用于个人中枢知识图谱构造 */
+  @Query("""
+      select e.contentCategory, e.contentTags from InputMessageEntity e
+      where e.createdBy = :createdBy
+        and ((e.contentCategory is not null and e.contentCategory <> '')
+          or (e.contentTags is not null and e.contentTags <> ''))
+      order by e.receivedAt desc
+      """)
+  List<Object[]> findCategoryAndTagsByCreatedBy(@Param("createdBy") String createdBy);
+
   /** 按创建者查询所有已使用的标签（contentTags 以逗号分隔，需在 Service 层拆分聚合） */
   @Query("""
       select distinct e.contentTags from InputMessageEntity e

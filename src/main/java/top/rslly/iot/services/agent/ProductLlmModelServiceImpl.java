@@ -129,7 +129,8 @@ public class ProductLlmModelServiceImpl implements ProductLlmModelService {
   @Override
   @Transactional(rollbackFor = Exception.class)
   public JsonResult<?> postProductLlmModel(ProductLlmModel productLlmModel) {
-    if (productRepository.findAllById(productLlmModel.getProductId()).isEmpty()) {
+    if (productLlmModel.getProductId() != 0
+        && productRepository.findAllById(productLlmModel.getProductId()).isEmpty()) {
       return ResultTool.fail(ResultCode.COMMON_FAIL);
     }
     if (llmProviderInformationRepository.findAllById(productLlmModel.getProviderId()).isEmpty()) {

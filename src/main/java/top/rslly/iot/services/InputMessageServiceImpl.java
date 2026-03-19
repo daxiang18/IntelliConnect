@@ -35,7 +35,9 @@ import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import top.rslly.iot.dao.InputMessageRepository;
+import top.rslly.iot.dao.HubPipelineConfigRepository;
 import top.rslly.iot.models.InputMessageEntity;
+import top.rslly.iot.models.HubPipelineConfigEntity;
 import top.rslly.iot.param.request.AgentLongMemory;
 import top.rslly.iot.param.request.InputAttachmentParam;
 import top.rslly.iot.param.request.InputMessageCreateParam;
@@ -136,6 +138,30 @@ public class InputMessageServiceImpl implements InputMessageService {
   private TodoItemRepository todoItemRepository;
   @Autowired(required = false)
   private KnowledgeGraphicServiceImpl knowledgeGraphicService;
+  @Autowired(required = false)
+  private HubPipelineConfigRepository hubPipelineConfigRepository;
+
+  /**
+   * Resolve pipeline config for a given username.
+   * Looks up the user's first bound product and returns its pipeline config.
+   * Returns null if no config found (caller should treat all steps as enabled).
+   */
+  private HubPipelineConfigEntity resolvePipelineConfig(String username) {
+    if (hubPipelineConfigRepository == null || username == null) {
+      return null;
+    }
+    try {
+      // Use the session-based approach: we don't tie pipeline to a specific product
+      // since messages are user-level. Return the first product's config.
+      List<HubPipelineConfigEntity> allConfigs = hubPipelineConfigRepository.findAll();
+      // For now, return the first config found — in practice this should be product-scoped
+      // once messages gain a productId field.
+      return allConfigs.isEmpty() ? null : allConfigs.get(0);
+    } catch (Exception e) {
+      log.warn("Failed to resolve pipeline config for user={}: {}", username, e.getMessage());
+      return null;
+    }
+  }
 
   private String resolveUsername(String token) {
     String tokenDeal = token.replace(JwtTokenUtil.TOKEN_PREFIX, "");
@@ -252,26 +278,28 @@ public class InputMessageServiceImpl implements InputMessageService {
     return CONTENT_TYPE_URL.equalsIgnoreCase(contentType);
   }
 
-  private String resolveUrlContentForIngest(InputMessageEntity entity) {
-    var normalizedResult = urlContentNormalizer.normalize(entity.getRawContent());
+  private String resolveUrlContentForIngest(long messageId, String rawContent, String existingNormalizedContent) {
+    var normalizedResult = urlContentNormalizer.normalize(rawContent);
     String normalizedContent = normalizedResult.normalizedContent();
-    String fallbackSummary = entity.getNormalizedContent();
-    if (!normalizedResult.success() && fallbackSummary != null && !fallbackSummary.isBlank()
-        && !fallbackSummary.equals(entity.getRawContent()) && !normalizedContent.contains(fallbackSummary)) {
-      normalizedContent = normalizedContent + "\n\n## 原始链接消息\n" + fallbackSummary;
+    if (!normalizedResult.success() && existingNormalizedContent != null && !existingNormalizedContent.isBlank()
+        && !existingNormalizedContent.equals(rawContent) && !normalizedContent.contains(existingNormalizedContent)) {
+      normalizedContent = normalizedContent + "\n\n## 原始链接消息\n" + existingNormalizedContent;
     }
-    entity.setNormalizedContent(normalizedContent);
-    inputMessageRepository.save(entity);
+    // 从 DB 重新加载最新 entity 再保存，避免异步线程中乐观锁冲突
+    final String contentToSave = normalizedContent;
+    inputMessageRepository.findById(messageId).ifPresent(freshEntity -> {
+      freshEntity.setNormalizedContent(contentToSave);
+      inputMessageRepository.save(freshEntity);
+    });
     if (normalizedResult.success()) {
       log.info(
-          "url content normalized, messageId={}, dedupeKey={}, sessionId={}, sourceUrl={}, title={}, contentLength={}",
-          entity.getId(), entity.getDedupeKey(), entity.getSessionId(), entity.getRawContent(),
-          normalizedResult.title(), normalizedContent == null ? 0 : normalizedContent.length());
+          "url content normalized, messageId={}, sourceUrl={}, title={}, contentLength={}",
+          messageId, rawContent, normalizedResult.title(),
+          normalizedContent == null ? 0 : normalizedContent.length());
     }
     if (!normalizedResult.success()) {
-      log.warn("url content normalization failed, messageId={}, dedupeKey={}, sessionId={}, sourceUrl={}, reason={}",
-          entity.getId(), entity.getDedupeKey(), entity.getSessionId(), entity.getRawContent(),
-          normalizedResult.failureReason());
+      log.warn("url content normalization failed, messageId={}, sourceUrl={}, reason={}",
+          messageId, rawContent, normalizedResult.failureReason());
     }
     return normalizedContent;
   }
@@ -315,9 +343,9 @@ public class InputMessageServiceImpl implements InputMessageService {
     return contentBuilder.toString();
   }
 
-  private String resolveImageContentForIngest(InputMessageEntity entity) {
-    String imageUrl = entity.getRawContent();
-    String fallbackContent = entity.getNormalizedContent();
+  private String resolveImageContentForIngest(long messageId, String rawContent, String existingNormalizedContent) {
+    String imageUrl = rawContent;
+    String fallbackContent = existingNormalizedContent;
     if (fallbackContent == null || fallbackContent.isBlank()) {
       fallbackContent = imageUrl;
     }
@@ -328,22 +356,24 @@ public class InputMessageServiceImpl implements InputMessageService {
     String aiVisionResponse = aiService.getAiVisionIntent(IMAGE_SEARCH_PROMPT, imageUrl);
     String visionText = extractVisionText(aiVisionResponse);
     if (visionText == null || visionText.isBlank()) {
-      log.warn("image vision enrichment skipped, messageId={}, dedupeKey={}, sessionId={}",
-          entity.getId(), entity.getDedupeKey(), entity.getSessionId());
+      log.warn("image vision enrichment skipped, messageId={}", messageId);
       return fallbackContent;
     }
 
-    String enrichedContent = buildImageSearchableContent(imageUrl, entity.getNormalizedContent(), visionText);
-    entity.setNormalizedContent(enrichedContent);
-    inputMessageRepository.save(entity);
-    log.info("image content enriched, messageId={}, dedupeKey={}, sessionId={}, contentLength={}",
-        entity.getId(), entity.getDedupeKey(), entity.getSessionId(), enrichedContent.length());
+    String enrichedContent = buildImageSearchableContent(imageUrl, existingNormalizedContent, visionText);
+    // 从 DB 重新加载最新 entity 再保存，避免异步线程中乐观锁冲突
+    inputMessageRepository.findById(messageId).ifPresent(freshEntity -> {
+      freshEntity.setNormalizedContent(enrichedContent);
+      inputMessageRepository.save(freshEntity);
+    });
+    log.info("image content enriched, messageId={}, contentLength={}",
+        messageId, enrichedContent.length());
     return enrichedContent;
   }
 
-  private String resolveVoiceContentForIngest(InputMessageEntity entity) {
-    String audioUrl = entity.getRawContent();
-    String existingTranscript = entity.getNormalizedContent();
+  private String resolveVoiceContentForIngest(long messageId, String rawContent, String existingNormalizedContent) {
+    String audioUrl = rawContent;
+    String existingTranscript = existingNormalizedContent;
 
     // Upstream already provided a distinct transcript — preserve it without re-transcribing.
     boolean hasDistinctTranscript = existingTranscript != null && !existingTranscript.isBlank()
@@ -353,22 +383,23 @@ public class InputMessageServiceImpl implements InputMessageService {
     }
 
     if (audioUrl == null || audioUrl.isBlank()) {
-      log.warn("voice transcription skipped: no audio URL, messageId={}, dedupeKey={}, sessionId={}",
-          entity.getId(), entity.getDedupeKey(), entity.getSessionId());
+      log.warn("voice transcription skipped: no audio URL, messageId={}", messageId);
       return existingTranscript != null && !existingTranscript.isBlank() ? existingTranscript : audioUrl;
     }
 
     String transcript = asrServiceFactory.getService().getText(audioUrl);
     if (transcript == null || transcript.isBlank()) {
-      log.warn("voice transcription returned blank, falling back to audioUrl, messageId={}, dedupeKey={}, sessionId={}",
-          entity.getId(), entity.getDedupeKey(), entity.getSessionId());
+      log.warn("voice transcription returned blank, falling back to audioUrl, messageId={}", messageId);
       return audioUrl;
     }
 
-    entity.setNormalizedContent(transcript);
-    inputMessageRepository.save(entity);
-    log.info("voice content transcribed in-pipeline, messageId={}, dedupeKey={}, sessionId={}, transcriptLength={}",
-        entity.getId(), entity.getDedupeKey(), entity.getSessionId(), transcript.length());
+    // 从 DB 重新加载最新 entity 再保存，避免异步线程中乐观锁冲突
+    inputMessageRepository.findById(messageId).ifPresent(freshEntity -> {
+      freshEntity.setNormalizedContent(transcript);
+      inputMessageRepository.save(freshEntity);
+    });
+    log.info("voice content transcribed in-pipeline, messageId={}, transcriptLength={}",
+        messageId, transcript.length());
     return transcript;
   }
 
@@ -638,6 +669,7 @@ public class InputMessageServiceImpl implements InputMessageService {
           entity.getSyncTargets());
       return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
     }
+    final String effectiveNormalizedContent = normalizedContent;
 
     long processingStartedAt = System.currentTimeMillis();
     applyStatus(entity, STATUS_PROCESSING, processingStartedAt);
@@ -648,6 +680,8 @@ public class InputMessageServiceImpl implements InputMessageService {
     String contentType = entity.getContentType();
     String rawContent = entity.getRawContent();
     String syncTargets = entity.getSyncTargets();
+    String documentPurpose = entity.getDocumentPurpose();
+    String syncStatus = entity.getSyncStatus();
     String attemptToken = savedEntity.getProcessingAttemptToken();
 
     log.info(
@@ -657,16 +691,18 @@ public class InputMessageServiceImpl implements InputMessageService {
     taskExecutor.execute(() -> {
       log.info("input message processing started, id={}, dedupeKey={}, sessionId={}, contentType={}, processingStartedAt={}, attemptToken={}",
           id, dedupeKey, sessionId, contentType, processingStartedAt, attemptToken);
+      // Resolve pipeline config for conditional step execution
+      HubPipelineConfigEntity pipelineConfig = resolvePipelineConfig(createdBy);
       try {
         String contentToIngest;
-        if (isUrlContentType(contentType)) {
-          contentToIngest = resolveUrlContentForIngest(entity);
-        } else if (CONTENT_TYPE_IMAGE.equalsIgnoreCase(contentType)) {
-          contentToIngest = resolveImageContentForIngest(entity);
-        } else if (CONTENT_TYPE_VOICE.equalsIgnoreCase(contentType)) {
-          contentToIngest = resolveVoiceContentForIngest(entity);
+        if (isUrlContentType(contentType) && (pipelineConfig == null || pipelineConfig.isUrlNormalize())) {
+          contentToIngest = resolveUrlContentForIngest(id, rawContent, effectiveNormalizedContent);
+        } else if (CONTENT_TYPE_IMAGE.equalsIgnoreCase(contentType) && (pipelineConfig == null || pipelineConfig.isImageVision())) {
+          contentToIngest = resolveImageContentForIngest(id, rawContent, effectiveNormalizedContent);
+        } else if (CONTENT_TYPE_VOICE.equalsIgnoreCase(contentType) && (pipelineConfig == null || pipelineConfig.isVoiceAsr())) {
+          contentToIngest = resolveVoiceContentForIngest(id, rawContent, effectiveNormalizedContent);
         } else {
-          contentToIngest = entity.getNormalizedContent();
+          contentToIngest = effectiveNormalizedContent;
         }
         if (contentToIngest == null || contentToIngest.isBlank()) {
           contentToIngest = rawContent;
@@ -684,6 +720,7 @@ public class InputMessageServiceImpl implements InputMessageService {
         String aiSummary = null;
         String todosJson = null;
         String entitiesJson = null;
+        if (pipelineConfig == null || pipelineConfig.isAiAnalysis()) {
         try {
           AiContentAnalyzer.AnalysisResult aiResult =
               aiContentAnalyzer.analyze(contentType, rawContent, contentToIngest);
@@ -713,6 +750,9 @@ public class InputMessageServiceImpl implements InputMessageService {
         } catch (Exception aiEx) {
           log.warn("AI analysis exception, falling back to rules: id={}, error={}", id, aiEx.getMessage());
         }
+        } else {
+          log.info("AI analysis skipped by pipeline config: id={}", id);
+        }
 
         // Persist updated category/tags/AI results after content enrichment
         final String persistCategory = finalCategory;
@@ -730,7 +770,7 @@ public class InputMessageServiceImpl implements InputMessageService {
         });
 
         // G3: 将 AI 提取的待办写入独立的 TodoItem 表
-        if (todosJson != null) {
+        if (todosJson != null && (pipelineConfig == null || pipelineConfig.isTodoExtraction())) {
           try {
             // todosJson 已由上面的 aiResult 手动序列化，直接解析即可
             com.alibaba.fastjson.JSONArray todosArray = JSON.parseArray(todosJson);
@@ -763,17 +803,18 @@ public class InputMessageServiceImpl implements InputMessageService {
         metadata.put("contentCategory", persistCategory);
         metadata.put("contentTags", persistTags);
         metadata.put("documentType", "personal_input");
-        if (entity.getDocumentPurpose() != null && !entity.getDocumentPurpose().isBlank()) {
-          metadata.put("documentPurpose", entity.getDocumentPurpose());
+        if (documentPurpose != null && !documentPurpose.isBlank()) {
+          metadata.put("documentPurpose", documentPurpose);
         }
-        if (entity.getSyncTargets() != null && !entity.getSyncTargets().isBlank()) {
-          metadata.put("syncTargets", entity.getSyncTargets());
+        if (syncTargets != null && !syncTargets.isBlank()) {
+          metadata.put("syncTargets", syncTargets);
         }
-        metadata.put("syncStatus", resolveSyncStatus(entity.getSyncTargets(), entity.getSyncStatus()));
+        metadata.put("syncStatus", resolveSyncStatus(syncTargets, syncStatus));
         if (isUrlContentType(contentType) && rawContent != null && !rawContent.isBlank()) {
           metadata.put("sourceUrl", rawContent);
         }
         // G1.4: 重处理前先清理可能存在的旧向量，避免重复
+        if (pipelineConfig == null || pipelineConfig.isVectorIngest()) {
         try {
           RagUtility.deleteByDedupeKey(knowledgeChatEmbeddingStore, dedupeKey);
         } catch (Exception cleanupEx) {
@@ -781,7 +822,11 @@ public class InputMessageServiceImpl implements InputMessageService {
         }
         RagUtility.ingestTextToChroma(contentToIngest, metadata, embeddingModel,
             knowledgeChatEmbeddingStore);
-        if (feishuSyncService != null && shouldSyncToTarget(entity.getSyncTargets(), SYNC_TARGET_FEISHU)) {
+        } else {
+          log.info("Vector ingest skipped by pipeline config: id={}", id);
+        }
+        if (feishuSyncService != null && shouldSyncToTarget(syncTargets, SYNC_TARGET_FEISHU)
+            && (pipelineConfig == null || pipelineConfig.isFeishuSync())) {
           try {
             log.info("input message Feishu sync starting, id={}, dedupeKey={}, sessionId={}", id, dedupeKey,
                 sessionId);
@@ -802,7 +847,8 @@ public class InputMessageServiceImpl implements InputMessageService {
           }
         }
         // G5: GitHub 同步
-        if (githubSyncService != null && shouldSyncToTarget(entity.getSyncTargets(), SYNC_TARGET_GITHUB)) {
+        if (githubSyncService != null && shouldSyncToTarget(syncTargets, SYNC_TARGET_GITHUB)
+            && (pipelineConfig == null || pipelineConfig.isGithubSync())) {
           try {
             log.info("input message GitHub sync starting, id={}, dedupeKey={}", id, dedupeKey);
             GithubSyncService.GithubSyncResult githubSyncResult =
@@ -819,7 +865,8 @@ public class InputMessageServiceImpl implements InputMessageService {
           }
         }
         // G4: 知识图谱自动关联 — 将 AI 提取的实体写入图谱
-        if (knowledgeGraphicService != null && persistEntitiesJson != null) {
+        if (knowledgeGraphicService != null && persistEntitiesJson != null
+            && (pipelineConfig == null || pipelineConfig.isKnowledgeGraphLink())) {
           try {
             List<String> entityNames = JSON.parseArray(persistEntitiesJson, String.class);
             if (entityNames != null && !entityNames.isEmpty()) {
@@ -1274,7 +1321,8 @@ public class InputMessageServiceImpl implements InputMessageService {
   @Override
   public JsonResult<?> listMessages(String sourceType, String status, String contentType,
       String keyword, Boolean archived, Long startTime, Long endTime,
-      String documentPurpose, Integer page, Integer size, String token) {
+      String documentPurpose, String contentCategory, String contentTag,
+      Integer page, Integer size, String token) {
     String username;
     try {
       username = resolveUsername(token);
@@ -1294,9 +1342,12 @@ public class InputMessageServiceImpl implements InputMessageService {
     String kw = (keyword != null && !keyword.isBlank()) ? keyword : null;
     boolean archivedOnly = Boolean.TRUE.equals(archived);
     String docPurpose = (documentPurpose != null && !documentPurpose.isBlank()) ? documentPurpose : null;
+    String cntCategory = (contentCategory != null && !contentCategory.isBlank()) ? contentCategory : null;
+    String cntTag = (contentTag != null && !contentTag.isBlank()) ? contentTag : null;
 
     Page<InputMessageEntity> result = inputMessageRepository.searchMessages(
-        username, srcType, sts, cntType, kw, archivedOnly, startTime, endTime, docPurpose, pageable);
+        username, srcType, sts, cntType, kw, archivedOnly, startTime, endTime, docPurpose,
+        cntCategory, cntTag, pageable);
 
     JSONObject data = new JSONObject();
     data.put("content", result.getContent().stream().map(this::toResponse)
@@ -1353,6 +1404,58 @@ public class InputMessageServiceImpl implements InputMessageService {
     data.put("byPurpose", byPurpose);
 
     data.put("total", totalCount);
+    return ResultTool.success(data);
+  }
+
+  @Override
+  public JsonResult<?> getCategoryStats(String token) {
+    String username;
+    try {
+      username = resolveUsername(token);
+    } catch (Exception e) {
+      log.warn("get category stats failed to parse token", e);
+      return ResultTool.fail(ResultCode.PARAM_NOT_VALID);
+    }
+
+    JSONObject data = new JSONObject();
+
+    // 按内容分类分组统计
+    List<Object[]> categoryCounts = inputMessageRepository.countByCategoryGrouped(username);
+    com.alibaba.fastjson.JSONArray categories = new com.alibaba.fastjson.JSONArray();
+    for (Object[] row : categoryCounts) {
+      String categoryKey = (String) row[0];
+      Long count = (Long) row[1];
+      JSONObject item = new JSONObject();
+      item.put("category", categoryKey != null ? categoryKey : "unknown");
+      item.put("count", count);
+      categories.add(item);
+    }
+    data.put("categories", categories);
+
+    // 聚合所有标签及其出现次数
+    List<String> allTagStrings = inputMessageRepository.findDistinctTagsByCreatedBy(username);
+    java.util.Map<String, Integer> tagCountMap = new java.util.LinkedHashMap<>();
+    for (String tagStr : allTagStrings) {
+      if (tagStr == null || tagStr.isBlank()) continue;
+      for (String tag : tagStr.split(",")) {
+        String trimmedTag = tag.trim();
+        if (!trimmedTag.isEmpty()) {
+          tagCountMap.merge(trimmedTag, 1, Integer::sum);
+        }
+      }
+    }
+    // 按出现次数降序排列
+    com.alibaba.fastjson.JSONArray tags = new com.alibaba.fastjson.JSONArray();
+    tagCountMap.entrySet().stream()
+        .sorted(java.util.Map.Entry.<String, Integer>comparingByValue().reversed())
+        .forEach(entry -> {
+          JSONObject item = new JSONObject();
+          item.put("tag", entry.getKey());
+          item.put("count", entry.getValue());
+          tags.add(item);
+        });
+    data.put("tags", tags);
+
     return ResultTool.success(data);
   }
 

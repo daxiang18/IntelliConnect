@@ -23,8 +23,11 @@ import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import top.rslly.iot.dao.HubPersonaRepository;
+import top.rslly.iot.models.HubPersonaEntity;
 import top.rslly.iot.utility.ai.ModelMessage;
 import top.rslly.iot.utility.ai.llm.LLM;
 import top.rslly.iot.utility.ai.llm.LLMFactory;
@@ -57,7 +60,10 @@ public class AiContentAnalyzer {
   @Value("${hub.ai-analyzer.max-text-length:2000}")
   private int maxTextLength;
 
-  private static final String SYSTEM_PROMPT = """
+  @Autowired(required = false)
+  private HubPersonaRepository hubPersonaRepository;
+
+  private static final String DEFAULT_SYSTEM_PROMPT = """
       你是一个个人知识管理助手。请分析以下用户输入内容，返回严格 JSON 格式（不要输出 markdown 代码块）：
 
       {
@@ -121,16 +127,28 @@ public class AiContentAnalyzer {
   }
 
   /**
-   * 对输入内容进行 AI 分析。
+   * 对输入内容进行 AI 分析（使用默认系统提示词）。
    * 如果文本太短或 LLM 失败，返回 null（调用方降级为规则分类）。
    */
   public AnalysisResult analyze(String contentType, String rawContent, String normalizedContent) {
+    return analyze(contentType, rawContent, normalizedContent, 0);
+  }
+
+  /**
+   * 对输入内容进行 AI 分析，支持按产品读取数据库中的自定义人设。
+   * 如果文本太短或 LLM 失败，返回 null（调用方降级为规则分类）。
+   */
+  public AnalysisResult analyze(String contentType, String rawContent, String normalizedContent,
+      int productId) {
     String text = normalizedContent != null && !normalizedContent.isBlank()
         ? normalizedContent : rawContent;
     if (text == null || text.length() < minTextLength) {
-      log.debug("AI analysis skipped: text too short ({} chars)", text == null ? 0 : text.length());
+      log.info("AI analysis skipped: text too short ({} chars), minTextLength={}", text == null ? 0 : text.length(), minTextLength);
       return null;
     }
+
+    // 优先读取数据库中的自定义人设，回退到硬编码默认值
+    String systemPrompt = resolveSystemPrompt(productId);
 
     // 截断过长文本
     String truncatedText = text.length() > maxTextLength ? text.substring(0, maxTextLength) + "..." : text;
@@ -141,7 +159,7 @@ public class AiContentAnalyzer {
     try {
       LLM llm = LLMFactory.getLLM(llmName);
       List<ModelMessage> messages = new ArrayList<>();
-      messages.add(new ModelMessage("system", SYSTEM_PROMPT));
+      messages.add(new ModelMessage("system", systemPrompt));
       messages.add(new ModelMessage("user", userPrompt));
 
       // 使用带超时的方式调用
@@ -169,6 +187,30 @@ public class AiContentAnalyzer {
       log.warn("AI analysis failed: {}", e.getMessage());
       return null;
     }
+  }
+
+  /**
+   * 根据产品 ID 从数据库读取自定义人设的 system_prompt，回退到默认值
+   */
+  private String resolveSystemPrompt(int productId) {
+    if (productId > 0 && hubPersonaRepository != null) {
+      try {
+        List<HubPersonaEntity> personas =
+            hubPersonaRepository.findAllByProductIdAndEnabledTrue(productId);
+        if (!personas.isEmpty()) {
+          String dbPrompt = personas.get(0).getSystemPrompt();
+          if (dbPrompt != null && !dbPrompt.isBlank()) {
+            log.info("Using custom persona for productId={}, persona='{}'", productId,
+                personas.get(0).getPersonaName());
+            return dbPrompt;
+          }
+        }
+      } catch (Exception e) {
+        log.warn("Failed to read persona from DB for productId={}, using default: {}", productId,
+            e.getMessage());
+      }
+    }
+    return DEFAULT_SYSTEM_PROMPT;
   }
 
   /**

@@ -1,5 +1,6 @@
 import hub from './modules/hub'
 import iot from './modules/iot'
+import shared from './modules/shared'
 import nestMenu from './modules/nestMenu'
 import permission from './modules/permission'
 
@@ -41,6 +42,7 @@ export const asyncRoutes = [
   //...nestMenu,
   ...hub,
   ...iot,
+  ...shared,
   ...permission,
   {
     path: '/about',

@@ -50,13 +50,17 @@ public interface InputMessageService {
   JsonResult<?> promoteMessageToLongMemory(long id, InputMessagePromoteParam inputMessagePromoteParam,
       String token);
 
-  /** 收件箱：分页查询当前用户所有消息，支持按来源类型、状态、内容类型、关键词、日期范围、文档用途筛选 */
+  /** 收件箱：分页查询当前用户所有消息，支持按来源类型、状态、内容类型、关键词、日期范围、文档用途、内容分类、标签筛选 */
   JsonResult<?> listMessages(String sourceType, String status, String contentType,
       String keyword, Boolean archived, Long startTime, Long endTime,
-      String documentPurpose, Integer page, Integer size, String token);
+      String documentPurpose, String contentCategory, String contentTag,
+      Integer page, Integer size, String token);
 
   /** 消息统计：按状态和来源类型分组统计 */
   JsonResult<?> getMessageStats(String token);
+
+  /** 分类统计：按内容分类和标签分组统计 */
+  JsonResult<?> getCategoryStats(String token);
 
   /** 查询单条消息详情 */
   JsonResult<?> getMessageById(long id, String token);

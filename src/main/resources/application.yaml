@@ -237,7 +237,7 @@ hub:
   menu-group: hub
   ai-analyzer:
     timeout-seconds: ${HUB_AI_ANALYZER_TIMEOUT:30}
-    min-text-length: ${HUB_AI_ANALYZER_MIN_TEXT:20}
+    min-text-length: ${HUB_AI_ANALYZER_MIN_TEXT:10}
     max-text-length: ${HUB_AI_ANALYZER_MAX_TEXT:2000}
   sync:
     github:

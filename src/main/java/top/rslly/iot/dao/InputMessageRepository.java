@@ -79,7 +79,7 @@ public interface InputMessageRepository extends JpaRepository<InputMessageEntity
       @Param("sessionId") String sessionId, @Param("createdBy") String createdBy, @Param("status") String status,
       @Param("threshold") Long threshold, Pageable pageable);
 
-  /** 通用多条件组合查询（支持关键词搜索 + 日期范围 + 文档用途） */
+  /** 通用多条件组合查询（支持关键词搜索 + 日期范围 + 文档用途 + 内容分类 + 标签） */
   @Query("""
       select e from InputMessageEntity e
       where e.createdBy = :createdBy
@@ -91,6 +91,8 @@ public interface InputMessageRepository extends JpaRepository<InputMessageEntity
         and (:startTime is null or e.receivedAt >= :startTime)
         and (:endTime is null or e.receivedAt <= :endTime)
         and (:documentPurpose is null or e.documentPurpose = :documentPurpose)
+        and (:contentCategory is null or e.contentCategory = :contentCategory)
+        and (:contentTag is null or e.contentTags like concat('%', :contentTag, '%'))
       order by e.receivedAt desc
       """)
   Page<InputMessageEntity> searchMessages(
@@ -103,6 +105,8 @@ public interface InputMessageRepository extends JpaRepository<InputMessageEntity
       @Param("startTime") Long startTime,
       @Param("endTime") Long endTime,
       @Param("documentPurpose") String documentPurpose,
+      @Param("contentCategory") String contentCategory,
+      @Param("contentTag") String contentTag,
       Pageable pageable);
 
   /** 按创建者统计各状态消息数量 */
@@ -138,6 +142,24 @@ public interface InputMessageRepository extends JpaRepository<InputMessageEntity
       group by e.documentPurpose
       """)
   List<Object[]> countByDocumentPurposeGrouped(@Param("createdBy") String createdBy);
+
+  /** 按创建者统计各内容分类（contentCategory）消息数量 */
+  @Query("""
+      select e.contentCategory, count(e) from InputMessageEntity e
+      where e.createdBy = :createdBy
+        and e.contentCategory is not null and e.contentCategory <> ''
+      group by e.contentCategory
+      order by count(e) desc
+      """)
+  List<Object[]> countByCategoryGrouped(@Param("createdBy") String createdBy);
+
+  /** 按创建者查询所有已使用的标签（contentTags 以逗号分隔，需在 Service 层拆分聚合） */
+  @Query("""
+      select distinct e.contentTags from InputMessageEntity e
+      where e.createdBy = :createdBy
+        and e.contentTags is not null and e.contentTags <> ''
+      """)
+  List<String> findDistinctTagsByCreatedBy(@Param("createdBy") String createdBy);
 
   /** 按创建者查询需要同步的消息列表（有 syncTargets 的），按同步时间倒序 */
   @Query("""

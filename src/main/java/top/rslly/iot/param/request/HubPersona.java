@@ -1,0 +1,44 @@
+/**
+ * Copyright © 2023-2030 The ruanrongman Authors
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package top.rslly.iot.param.request;
+
+import lombok.Data;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+
+@Data
+public class HubPersona {
+  private int id;
+  private int productId;
+  @NotBlank(message = "personaName 不能为空")
+  @Size(min = 1, max = 100, message = "personaName 长度必须在 1 到 100 之间")
+  private String personaName;
+  @NotBlank(message = "systemPrompt 不能为空")
+  @Size(min = 1, max = 10000, message = "systemPrompt 长度必须在 1 到 10000 之间")
+  private String systemPrompt;
+  @Size(max = 50, message = "summaryStyle 长度不能超过 50")
+  private String summaryStyle = "concise";
+  @Size(max = 20, message = "language 长度不能超过 20")
+  private String language = "zh";
+  private int maxTags = 5;
+  private int maxEntities = 5;
+  private boolean enabled = true;
+}

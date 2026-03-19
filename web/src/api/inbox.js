@@ -62,6 +62,14 @@ export const getMessageStats = () =>
     headers: { Authorization: getToken() },
   })
 
+/** 获取分类统计数据（分类 + 标签云） */
+export const getCategoryStats = () =>
+  request({
+    url: '/api/v2/input/messages/categories',
+    method: 'get',
+    headers: { Authorization: getToken() },
+  })
+
 /** 查询单条消息详情 */
 export const getMessageById = (id) =>
   request({

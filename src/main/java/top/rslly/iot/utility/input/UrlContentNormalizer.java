@@ -37,6 +37,7 @@ public class UrlContentNormalizer {
       Pattern.compile("(?is)<(script|style|noscript|svg|canvas|iframe)\\b.*?</\\1>");
   private static final Pattern TAG_PATTERN = Pattern.compile("(?is)<[^>]+>");
   private static final Pattern URL_SCHEME_PATTERN = Pattern.compile("(?i)^https?://.+");
+  private static final Pattern URL_EXTRACT_PATTERN = Pattern.compile("(https?://[^\\s]+)");
 
   @Autowired
   private HttpRequestUtils httpRequestUtils;
@@ -46,8 +47,15 @@ public class UrlContentNormalizer {
       return failure(url, "URL 为空");
     }
     String trimmedUrl = url.trim();
+    // 如果整段内容不是纯 URL，尝试从中提取第一个 http/https URL
     if (!URL_SCHEME_PATTERN.matcher(trimmedUrl).matches()) {
-      return failure(trimmedUrl, "仅支持 http/https URL");
+      Matcher urlMatcher = URL_EXTRACT_PATTERN.matcher(trimmedUrl);
+      if (urlMatcher.find()) {
+        trimmedUrl = urlMatcher.group(1);
+        log.info("extracted URL from mixed content: {}", trimmedUrl);
+      } else {
+        return failure(trimmedUrl, "仅支持 http/https URL");
+      }
     }
 
     try (Response response = httpRequestUtils.httpGet(trimmedUrl)) {

@@ -58,6 +58,7 @@ const permission = {
 const product = {
   productPage: '产品页面',
   hubPage: '智能中枢',
+  sharedConfigPage: '平台配置',
   productXiaoZhi: '小智绑定',
   productRole: '角色设置',
   agentMemory: '记忆体设置',
@@ -89,6 +90,8 @@ const hubCore = {
   archive: '知识归档',
   syncStatus: '同步状态',
   todoList: '待办事项',
+  hubPersona: 'AI 人设配置',
+  hubPipeline: '处理逻辑配置',
   messageDetail: '消息详情',
 }
 const deviceData = {

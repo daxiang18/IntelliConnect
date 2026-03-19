@@ -51,6 +51,7 @@ const chart = {
 const product = {
   productPage: 'IoT Products',
   hubPage: 'Smart Hub',
+  sharedConfigPage: 'Platform Config',
   productXiaoZhi: 'productXiaoZhi',
   productRole: 'productRole',
   agentMemory: 'agentMemory',
@@ -82,6 +83,8 @@ const hubCore = {
   archive: 'Archive',
   syncStatus: 'Sync Status',
   todoList: 'Todo List',
+  hubPersona: 'AI Persona',
+  hubPipeline: 'Pipeline Config',
   messageDetail: 'Message Detail',
 }
 const permission = {

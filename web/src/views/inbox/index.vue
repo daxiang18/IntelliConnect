@@ -1,269 +1,359 @@
 <template>
-  <div class="inbox-container">
-    <div class="inbox-header">
-      <h2>消息收件箱</h2>
-      <div class="inbox-actions">
-        <a-button type="primary" @click="refreshList">
-          <template #icon><ReloadOutlined /></template>
-          刷新
+  <div class="inbox-layout">
+    <!-- 分类侧边栏 -->
+    <div class="category-sidebar" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
+      <div class="sidebar-header">
+        <h3 v-if="!sidebarCollapsed">分类浏览</h3>
+        <a-button type="text" size="small" @click="sidebarCollapsed = !sidebarCollapsed">
+          <template #icon>
+            <MenuFoldOutlined v-if="!sidebarCollapsed" />
+            <MenuUnfoldOutlined v-else />
+          </template>
         </a-button>
       </div>
-    </div>
 
-    <!-- 筛选栏 -->
-    <div class="inbox-filters">
-      <a-space :size="12" wrap>
-        <a-input-search
-          v-model:value="keyword"
-          placeholder="搜索消息内容..."
-          style="width: 220px"
-          allow-clear
-          @search="handleSearch"
-          @pressEnter="handleSearch"
-        />
-        <a-select
-          v-model:value="filters.sourceType"
-          placeholder="来源类型"
-          allowClear
-          style="width: 140px"
-          @change="handleFilterChange"
-        >
-          <a-select-option value="wechat">微信</a-select-option>
-          <a-select-option value="wx-official">公众号</a-select-option>
-          <a-select-option value="web-manual">手动输入</a-select-option>
-          <a-select-option value="feishu">飞书</a-select-option>
-        </a-select>
-        <a-select
-          v-model:value="filters.status"
-          placeholder="处理状态"
-          allowClear
-          style="width: 140px"
-          @change="handleFilterChange"
-        >
-          <a-select-option value="received">待处理</a-select-option>
-          <a-select-option value="processing">处理中</a-select-option>
-          <a-select-option value="ingested">已入库</a-select-option>
-          <a-select-option value="parsed">已解析</a-select-option>
-          <a-select-option value="archived">已归档</a-select-option>
-          <a-select-option value="synced">已同步</a-select-option>
-          <a-select-option value="failed">失败</a-select-option>
-        </a-select>
-        <a-select
-          v-model:value="filters.contentType"
-          placeholder="内容类型"
-          allowClear
-          style="width: 140px"
-          @change="handleFilterChange"
-        >
-          <a-select-option value="text">文本</a-select-option>
-          <a-select-option value="url">链接</a-select-option>
-          <a-select-option value="image">图片</a-select-option>
-          <a-select-option value="audio">音频</a-select-option>
-          <a-select-option value="file">文件</a-select-option>
-        </a-select>
-        <a-range-picker
-          v-model:value="dateRange"
-          :placeholder="['开始日期', '结束日期']"
-          style="width: 240px"
-          @change="handleDateRangeChange"
-        />
-        <a-select
-          v-model:value="filters.documentPurpose"
-          placeholder="文档用途"
-          allowClear
-          style="width: 140px"
-          @change="handleFilterChange"
-        >
-          <a-select-option value="quick_capture">速记</a-select-option>
-          <a-select-option value="study_doc">学习文档</a-select-option>
-          <a-select-option value="work_doc">工作文档</a-select-option>
-          <a-select-option value="life_record">生活记录</a-select-option>
-        </a-select>
-      </a-space>
-    </div>
-
-    <!-- 统计信息栏 + 全选 -->
-    <div class="inbox-stats" v-if="total > 0">
-      <div class="stats-left">
-        <a-checkbox
-          :checked="isAllSelected"
-          :indeterminate="isPartialSelected"
-          @change="toggleSelectAll"
-        >
-          全选
-        </a-checkbox>
-        <span class="stats-text">共 {{ total }} 条消息</span>
-      </div>
-      <div class="stats-right" v-if="autoRefreshEnabled">
-        <span class="auto-refresh-hint">自动刷新中</span>
-      </div>
-    </div>
-
-    <!-- 批量操作浮动栏 -->
-    <transition name="slide-up">
-      <div class="batch-bar" v-if="selectedIds.size > 0">
-        <span class="batch-count">已选 {{ selectedIds.size }} 条</span>
-        <a-space>
-          <a-popconfirm
-            title="确定批量处理选中的消息吗？"
-            ok-text="确定"
-            cancel-text="取消"
-            @confirm="handleBatchProcess"
-          >
-            <a-button size="small" type="primary" :loading="batchLoading">
-              <template #icon><ThunderboltOutlined /></template>
-              批量处理
-            </a-button>
-          </a-popconfirm>
-          <a-popconfirm
-            title="确定批量删除选中的消息吗？此操作不可恢复！"
-            ok-text="确定"
-            cancel-text="取消"
-            @confirm="handleBatchDelete"
-          >
-            <a-button size="small" danger :loading="batchLoading">
-              <template #icon><DeleteOutlined /></template>
-              批量删除
-            </a-button>
-          </a-popconfirm>
-          <a-button size="small" @click="clearSelection">取消选择</a-button>
-        </a-space>
-      </div>
-    </transition>
-
-    <!-- 新消息提示条 -->
-    <div class="new-msg-tip" v-if="hasNewMessages" @click="refreshList">
-      有新消息到达，点击刷新
-    </div>
-
-    <!-- 消息列表 -->
-    <div class="inbox-list">
-      <a-spin :spinning="loading">
-        <!-- 空状态引导 -->
-        <div v-if="!loading && messages.length === 0" class="inbox-empty">
-          <a-empty description="暂无消息">
-            <a-button type="primary" @click="$router.push('/quickNote')">
-              <template #icon><EditOutlined /></template>
-              去快速速记
-            </a-button>
-          </a-empty>
-        </div>
-
-        <div v-else class="message-cards">
+      <template v-if="!sidebarCollapsed">
+        <!-- 分类列表 -->
+        <div class="category-list">
           <div
-            v-for="msg in messages"
-            :key="msg.id"
-            class="message-card"
-            :class="{
-              'message-failed': msg.status === 'failed',
-              'message-selected': selectedIds.has(msg.id),
-            }"
+            class="category-item"
+            :class="{ active: !filters.contentCategory }"
+            @click="selectCategory(null)"
           >
-            <div class="message-card-header">
-              <div class="message-meta">
-                <a-checkbox
-                  :checked="selectedIds.has(msg.id)"
-                  @change="toggleSelect(msg.id)"
-                  @click.stop
-                />
-                <a-tag :color="sourceTypeColor(msg.sourceType)">{{ sourceTypeLabel(msg.sourceType) }}</a-tag>
-                <a-tag>{{ contentTypeLabel(msg.contentType) }}</a-tag>
-                <a-tag :color="statusColor(msg.status)">{{ statusLabel(msg.status) }}</a-tag>
-                <a-tag v-if="msg.documentPurpose" :color="purposeColor(msg.documentPurpose)" size="small">
-                  {{ purposeLabel(msg.documentPurpose) }}
-                </a-tag>
-                <template v-if="msg.category">
-                  <a-tag size="small" color="default">{{ msg.category }}</a-tag>
-                </template>
-                <template v-if="msg.tags && msg.tags.length > 0">
-                  <a-tag v-for="tag in msg.tags" :key="tag" size="small" color="default" class="content-tag">{{ tag }}</a-tag>
-                </template>
-              </div>
-              <div class="message-header-right">
-                <span class="message-time">{{ formatTime(msg.receivedAt) }}</span>
-                <a-button type="link" size="small" class="detail-link" @click="$router.push(`/messageDetail/${msg.id}`)">
-                  详情
-                </a-button>
-              </div>
-            </div>
-            <div class="message-card-body" @click="toggleExpand(msg.id)">
-              <p v-if="msg.aiSummary" class="message-ai-summary">
-                <span class="ai-label">AI</span>
-                {{ msg.aiSummary }}
-              </p>
-              <div
-                class="message-content-wrap"
-                :class="{ 'content-collapsed': !expandedIds.has(msg.id) && getContentLength(msg) > 200 }"
-              >
-                <p v-if="msg.contentType === 'url' && msg.rawContent" class="message-url">
-                  <a :href="msg.rawContent" target="_blank" rel="noopener" @click.stop>{{ msg.rawContent }}</a>
-                </p>
-                <p class="message-content">{{ msg.normalizedContent || msg.rawContent || '' }}</p>
-              </div>
-              <a-button
-                v-if="getContentLength(msg) > 200"
-                type="link"
-                size="small"
-                class="expand-btn"
-                @click.stop="toggleExpand(msg.id)"
-              >
-                {{ expandedIds.has(msg.id) ? '收起' : '展开全文' }}
-              </a-button>
-            </div>
-            <div class="message-card-footer" v-if="msg.status === 'received' || msg.status === 'failed' || (msg.status === 'ingested' && !msg.aiSummary)">
-              <a-popconfirm
-                v-if="msg.status === 'received'"
-                title="确定要处理这条消息吗？"
-                ok-text="确定"
-                cancel-text="取消"
-                @confirm="handleProcess(msg.id)"
-              >
-                <a-button size="small" type="link">
-                  <template #icon><ThunderboltOutlined /></template>
-                  处理
-                </a-button>
-              </a-popconfirm>
-              <a-popconfirm
-                v-if="msg.status === 'failed'"
-                title="确定要重试这条消息吗？"
-                ok-text="确定"
-                cancel-text="取消"
-                @confirm="handleRetry(msg.id)"
-              >
-                <a-button size="small" type="link" danger>
-                  <template #icon><RedoOutlined /></template>
-                  重试
-                </a-button>
-              </a-popconfirm>
-              <a-popconfirm
-                v-if="msg.status === 'ingested' && !msg.aiSummary"
-                title="重新进行 AI 分析（分类/摘要/待办提取）？"
-                ok-text="确定"
-                cancel-text="取消"
-                @confirm="handleReprocess(msg.id)"
-              >
-                <a-button size="small" type="link" style="color: #722ed1;">
-                  <template #icon><SyncOutlined /></template>
-                  重新分析
-                </a-button>
-              </a-popconfirm>
-            </div>
+            <span class="category-name">全部分类</span>
+            <span class="category-count">{{ total }}</span>
+          </div>
+          <div
+            v-for="cat in categoryList"
+            :key="cat.category"
+            class="category-item"
+            :class="{ active: filters.contentCategory === cat.category }"
+            @click="selectCategory(cat.category)"
+          >
+            <span class="category-icon">{{ categoryIcon(cat.category) }}</span>
+            <span class="category-name">{{ categoryLabel(cat.category) }}</span>
+            <span class="category-count">{{ cat.count }}</span>
           </div>
         </div>
-      </a-spin>
+
+        <!-- 标签云 -->
+        <div class="tag-cloud-section" v-if="tagList.length > 0">
+          <h4>标签筛选</h4>
+          <div class="tag-cloud">
+            <a-tag
+              v-for="tagItem in tagList"
+              :key="tagItem.tag"
+              :color="filters.contentTag === tagItem.tag ? 'blue' : 'default'"
+              class="tag-cloud-item"
+              @click="selectTag(tagItem.tag)"
+            >
+              {{ tagItem.tag }}
+              <span class="tag-count-badge">{{ tagItem.count }}</span>
+            </a-tag>
+          </div>
+          <a-button
+            v-if="filters.contentTag"
+            type="link"
+            size="small"
+            @click="selectTag(null)"
+            class="clear-tag-btn"
+          >
+            清除标签筛选
+          </a-button>
+        </div>
+      </template>
     </div>
 
-    <!-- 分页 -->
-    <div class="inbox-pagination" v-if="total > 0">
-      <a-pagination
-        v-model:current="currentPage"
-        v-model:pageSize="pageSize"
-        :total="total"
-        show-size-changer
-        :page-size-options="['10', '20', '50']"
-        @change="handlePageChange"
-        @showSizeChange="handlePageChange"
-      />
+    <!-- 主内容区 -->
+    <div class="inbox-container">
+      <div class="inbox-header">
+        <h2>消息收件箱</h2>
+        <div class="inbox-actions">
+          <a-button type="primary" @click="refreshList">
+            <template #icon><ReloadOutlined /></template>
+            刷新
+          </a-button>
+        </div>
+      </div>
+
+      <!-- 当前筛选条件提示 -->
+      <div class="active-filters" v-if="filters.contentCategory || filters.contentTag">
+        <span class="filter-label">当前筛选：</span>
+        <a-tag v-if="filters.contentCategory" closable @close="selectCategory(null)" color="blue">
+          分类: {{ categoryLabel(filters.contentCategory) }}
+        </a-tag>
+        <a-tag v-if="filters.contentTag" closable @close="selectTag(null)" color="purple">
+          标签: {{ filters.contentTag }}
+        </a-tag>
+      </div>
+
+      <!-- 筛选栏 -->
+      <div class="inbox-filters">
+        <a-space :size="12" wrap>
+          <a-input-search
+            v-model:value="keyword"
+            placeholder="搜索消息内容..."
+            style="width: 220px"
+            allow-clear
+            @search="handleSearch"
+            @pressEnter="handleSearch"
+          />
+          <a-select
+            v-model:value="filters.sourceType"
+            placeholder="来源类型"
+            allowClear
+            style="width: 140px"
+            @change="handleFilterChange"
+          >
+            <a-select-option value="wechat">微信</a-select-option>
+            <a-select-option value="wx-official">公众号</a-select-option>
+            <a-select-option value="web-manual">手动输入</a-select-option>
+            <a-select-option value="feishu">飞书</a-select-option>
+          </a-select>
+          <a-select
+            v-model:value="filters.status"
+            placeholder="处理状态"
+            allowClear
+            style="width: 140px"
+            @change="handleFilterChange"
+          >
+            <a-select-option value="received">待处理</a-select-option>
+            <a-select-option value="processing">处理中</a-select-option>
+            <a-select-option value="ingested">已入库</a-select-option>
+            <a-select-option value="parsed">已解析</a-select-option>
+            <a-select-option value="archived">已归档</a-select-option>
+            <a-select-option value="synced">已同步</a-select-option>
+            <a-select-option value="failed">失败</a-select-option>
+          </a-select>
+          <a-select
+            v-model:value="filters.contentType"
+            placeholder="内容类型"
+            allowClear
+            style="width: 140px"
+            @change="handleFilterChange"
+          >
+            <a-select-option value="text">文本</a-select-option>
+            <a-select-option value="url">链接</a-select-option>
+            <a-select-option value="image">图片</a-select-option>
+            <a-select-option value="audio">音频</a-select-option>
+            <a-select-option value="file">文件</a-select-option>
+          </a-select>
+          <a-range-picker
+            v-model:value="dateRange"
+            :placeholder="['开始日期', '结束日期']"
+            style="width: 240px"
+            @change="handleDateRangeChange"
+          />
+          <a-select
+            v-model:value="filters.documentPurpose"
+            placeholder="文档用途"
+            allowClear
+            style="width: 140px"
+            @change="handleFilterChange"
+          >
+            <a-select-option value="quick_capture">速记</a-select-option>
+            <a-select-option value="study_doc">学习文档</a-select-option>
+            <a-select-option value="work_doc">工作文档</a-select-option>
+            <a-select-option value="life_record">生活记录</a-select-option>
+          </a-select>
+        </a-space>
+      </div>
+
+      <!-- 统计信息栏 + 全选 -->
+      <div class="inbox-stats" v-if="total > 0">
+        <div class="stats-left">
+          <a-checkbox
+            :checked="isAllSelected"
+            :indeterminate="isPartialSelected"
+            @change="toggleSelectAll"
+          >
+            全选
+          </a-checkbox>
+          <span class="stats-text">共 {{ total }} 条消息</span>
+        </div>
+        <div class="stats-right" v-if="autoRefreshEnabled">
+          <span class="auto-refresh-hint">自动刷新中</span>
+        </div>
+      </div>
+
+      <!-- 批量操作浮动栏 -->
+      <transition name="slide-up">
+        <div class="batch-bar" v-if="selectedIds.size > 0">
+          <span class="batch-count">已选 {{ selectedIds.size }} 条</span>
+          <a-space>
+            <a-popconfirm
+              title="确定批量处理选中的消息吗？"
+              ok-text="确定"
+              cancel-text="取消"
+              @confirm="handleBatchProcess"
+            >
+              <a-button size="small" type="primary" :loading="batchLoading">
+                <template #icon><ThunderboltOutlined /></template>
+                批量处理
+              </a-button>
+            </a-popconfirm>
+            <a-popconfirm
+              title="确定批量删除选中的消息吗？此操作不可恢复！"
+              ok-text="确定"
+              cancel-text="取消"
+              @confirm="handleBatchDelete"
+            >
+              <a-button size="small" danger :loading="batchLoading">
+                <template #icon><DeleteOutlined /></template>
+                批量删除
+              </a-button>
+            </a-popconfirm>
+            <a-button size="small" @click="clearSelection">取消选择</a-button>
+          </a-space>
+        </div>
+      </transition>
+
+      <!-- 新消息提示条 -->
+      <div class="new-msg-tip" v-if="hasNewMessages" @click="refreshList">
+        有新消息到达，点击刷新
+      </div>
+
+      <!-- 消息列表 -->
+      <div class="inbox-list">
+        <a-spin :spinning="loading">
+          <!-- 空状态引导 -->
+          <div v-if="!loading && messages.length === 0" class="inbox-empty">
+            <a-empty description="暂无消息">
+              <a-button type="primary" @click="$router.push('/quickNote')">
+                <template #icon><EditOutlined /></template>
+                去快速速记
+              </a-button>
+            </a-empty>
+          </div>
+
+          <div v-else class="message-cards">
+            <div
+              v-for="msg in messages"
+              :key="msg.id"
+              class="message-card"
+              :class="{
+                'message-failed': msg.status === 'failed',
+                'message-selected': selectedIds.has(msg.id),
+              }"
+            >
+              <div class="message-card-header">
+                <div class="message-meta">
+                  <a-checkbox
+                    :checked="selectedIds.has(msg.id)"
+                    @change="toggleSelect(msg.id)"
+                    @click.stop
+                  />
+                  <a-tag :color="sourceTypeColor(msg.sourceType)">{{ sourceTypeLabel(msg.sourceType) }}</a-tag>
+                  <a-tag>{{ contentTypeLabel(msg.contentType) }}</a-tag>
+                  <a-tag :color="statusColor(msg.status)">{{ statusLabel(msg.status) }}</a-tag>
+                  <a-tag v-if="msg.documentPurpose" :color="purposeColor(msg.documentPurpose)" size="small">
+                    {{ purposeLabel(msg.documentPurpose) }}
+                  </a-tag>
+                  <template v-if="msg.category">
+                    <a-tag
+                      size="small"
+                      color="default"
+                      class="clickable-tag"
+                      @click.stop="selectCategory(msg.category)"
+                    >{{ msg.category }}</a-tag>
+                  </template>
+                  <template v-if="msg.tags && msg.tags.length > 0">
+                    <a-tag
+                      v-for="tag in msg.tags"
+                      :key="tag"
+                      size="small"
+                      color="default"
+                      class="content-tag clickable-tag"
+                      @click.stop="selectTag(tag)"
+                    >{{ tag }}</a-tag>
+                  </template>
+                </div>
+                <div class="message-header-right">
+                  <span class="message-time">{{ formatTime(msg.receivedAt) }}</span>
+                  <a-button type="link" size="small" class="detail-link" @click="$router.push(`/messageDetail/${msg.id}`)">
+                    详情
+                  </a-button>
+                </div>
+              </div>
+              <div class="message-card-body" @click="toggleExpand(msg.id)">
+                <p v-if="msg.aiSummary" class="message-ai-summary">
+                  <span class="ai-label">AI</span>
+                  {{ msg.aiSummary }}
+                </p>
+                <div
+                  class="message-content-wrap"
+                  :class="{ 'content-collapsed': !expandedIds.has(msg.id) && getContentLength(msg) > 200 }"
+                >
+                  <p v-if="msg.contentType === 'url' && msg.rawContent" class="message-url">
+                    <a :href="msg.rawContent" target="_blank" rel="noopener" @click.stop>{{ msg.rawContent }}</a>
+                  </p>
+                  <p class="message-content">{{ msg.normalizedContent || msg.rawContent || '' }}</p>
+                </div>
+                <a-button
+                  v-if="getContentLength(msg) > 200"
+                  type="link"
+                  size="small"
+                  class="expand-btn"
+                  @click.stop="toggleExpand(msg.id)"
+                >
+                  {{ expandedIds.has(msg.id) ? '收起' : '展开全文' }}
+                </a-button>
+              </div>
+              <div class="message-card-footer" v-if="msg.status === 'received' || msg.status === 'failed' || msg.status === 'ingested'">
+                <a-popconfirm
+                  v-if="msg.status === 'received'"
+                  title="确定要处理这条消息吗？"
+                  ok-text="确定"
+                  cancel-text="取消"
+                  @confirm="handleProcess(msg.id)"
+                >
+                  <a-button size="small" type="link">
+                    <template #icon><ThunderboltOutlined /></template>
+                    处理
+                  </a-button>
+                </a-popconfirm>
+                <a-popconfirm
+                  v-if="msg.status === 'failed'"
+                  title="确定要重试这条消息吗？"
+                  ok-text="确定"
+                  cancel-text="取消"
+                  @confirm="handleRetry(msg.id)"
+                >
+                  <a-button size="small" type="link" danger>
+                    <template #icon><RedoOutlined /></template>
+                    重试
+                  </a-button>
+                </a-popconfirm>
+                <a-popconfirm
+                  v-if="msg.status === 'ingested'"
+                  title="重新进行 AI 分析（分类/摘要/待办提取）？"
+                  ok-text="确定"
+                  cancel-text="取消"
+                  @confirm="handleReprocess(msg.id)"
+                >
+                  <a-button size="small" type="link" style="color: #722ed1;">
+                    <template #icon><SyncOutlined /></template>
+                    重新分析
+                  </a-button>
+                </a-popconfirm>
+              </div>
+            </div>
+          </div>
+        </a-spin>
+      </div>
+
+      <!-- 分页 -->
+      <div class="inbox-pagination" v-if="total > 0">
+        <a-pagination
+          v-model:current="currentPage"
+          v-model:pageSize="pageSize"
+          :total="total"
+          show-size-changer
+          :page-size-options="['10', '20', '50']"
+          @change="handlePageChange"
+          @showSizeChange="handlePageChange"
+        />
+      </div>
     </div>
   </div>
 </template>
@@ -278,8 +368,10 @@ import {
   RedoOutlined,
   DeleteOutlined,
   SyncOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
 } from '@ant-design/icons-vue'
-import { getInboxMessages, processMessage, retryMessage, reprocessMessage, batchProcessMessages, batchDeleteMessages } from '@/api/inbox'
+import { getInboxMessages, processMessage, retryMessage, reprocessMessage, batchProcessMessages, batchDeleteMessages, getCategoryStats } from '@/api/inbox'
 
 const loading = ref(false)
 const batchLoading = ref(false)
@@ -293,6 +385,9 @@ const selectedIds = ref(new Set())
 const hasNewMessages = ref(false)
 const autoRefreshEnabled = ref(true)
 const dateRange = ref(null)
+const sidebarCollapsed = ref(false)
+const categoryList = ref([])
+const tagList = ref([])
 let autoRefreshTimer = null
 let lastTotal = 0
 
@@ -301,6 +396,8 @@ const filters = reactive({
   status: undefined,
   contentType: undefined,
   documentPurpose: undefined,
+  contentCategory: undefined,
+  contentTag: undefined,
 })
 
 // 批量选择
@@ -337,6 +434,34 @@ const clearSelection = () => {
   selectedIds.value = new Set()
 }
 
+// 分类侧边栏数据加载
+const fetchCategoryStats = async () => {
+  try {
+    const res = await getCategoryStats()
+    const { data, errorCode } = res.data
+    if (errorCode === 200 && data) {
+      categoryList.value = data.categories || []
+      tagList.value = data.tags || []
+    }
+  } catch (err) {
+    console.error('获取分类统计失败:', err)
+  }
+}
+
+const selectCategory = (category) => {
+  filters.contentCategory = category || undefined
+  currentPage.value = 1
+  selectedIds.value = new Set()
+  fetchMessages()
+}
+
+const selectTag = (tag) => {
+  filters.contentTag = tag || undefined
+  currentPage.value = 1
+  selectedIds.value = new Set()
+  fetchMessages()
+}
+
 const fetchMessages = async (silent = false) => {
   if (!silent) loading.value = true
   try {
@@ -348,6 +473,8 @@ const fetchMessages = async (silent = false) => {
     if (filters.status) params.status = filters.status
     if (filters.contentType) params.contentType = filters.contentType
     if (filters.documentPurpose) params.documentPurpose = filters.documentPurpose
+    if (filters.contentCategory) params.contentCategory = filters.contentCategory
+    if (filters.contentTag) params.contentTag = filters.contentTag
     if (keyword.value.trim()) params.keyword = keyword.value.trim()
     if (dateRange.value && dateRange.value.length === 2) {
       params.startTime = dateRange.value[0].startOf('day').valueOf()
@@ -382,6 +509,7 @@ const refreshList = () => {
   selectedIds.value = new Set()
   hasNewMessages.value = false
   fetchMessages()
+  fetchCategoryStats()
 }
 
 const handleSearch = () => {
@@ -448,7 +576,10 @@ const handleReprocess = async (id) => {
     await reprocessMessage(id)
     message.success('已提交重新分析，请稍候刷新查看结果')
     // 延迟刷新，给后端异步处理一点时间
-    setTimeout(() => fetchMessages(), 3000)
+    setTimeout(() => {
+      fetchMessages()
+      fetchCategoryStats()
+    }, 3000)
   } catch (err) {
     message.error('重新分析失败')
   }
@@ -469,6 +600,7 @@ const handleBatchProcess = async () => {
     }
     selectedIds.value = new Set()
     fetchMessages()
+    fetchCategoryStats()
   } catch (err) {
     message.error('批量处理失败')
   } finally {
@@ -490,6 +622,7 @@ const handleBatchDelete = async () => {
     }
     selectedIds.value = new Set()
     fetchMessages()
+    fetchCategoryStats()
   } catch (err) {
     message.error('批量删除失败')
   } finally {
@@ -512,6 +645,23 @@ const stopAutoRefresh = () => {
     clearInterval(autoRefreshTimer)
     autoRefreshTimer = null
   }
+}
+
+// 分类相关 helpers
+const categoryIcon = (category) => {
+  const icons = {
+    task: '\u2705', meeting: '\uD83D\uDCC5', question: '\u2753', idea: '\uD83D\uDCA1',
+    knowledge: '\uD83D\uDCD6', reference: '\uD83D\uDD17', note: '\uD83D\uDCDD', schedule: '\u23F0',
+  }
+  return icons[category] || '\uD83D\uDCC4'
+}
+
+const categoryLabel = (category) => {
+  const labels = {
+    task: '任务', meeting: '会议', question: '问题', idea: '灵感',
+    knowledge: '知识', reference: '参考', note: '笔记', schedule: '日程',
+  }
+  return labels[category] || category || '未分类'
 }
 
 const sourceTypeColor = (type) => {
@@ -562,6 +712,7 @@ const formatTime = (timestamp) => {
 
 onMounted(() => {
   fetchMessages()
+  fetchCategoryStats()
   startAutoRefresh()
 })
 
@@ -571,10 +722,148 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* 整体布局：侧边栏 + 主内容 */
+.inbox-layout {
+  display: flex;
+  gap: 0;
+  min-height: calc(100vh - 64px);
+}
+
+/* 分类侧边栏 */
+.category-sidebar {
+  width: 220px;
+  min-width: 220px;
+  background: #fff;
+  border-right: 1px solid #f0f0f0;
+  padding: 16px 0;
+  overflow-y: auto;
+  transition: width 0.2s, min-width 0.2s, padding 0.2s;
+}
+
+.category-sidebar.sidebar-collapsed {
+  width: 48px;
+  min-width: 48px;
+  padding: 16px 4px;
+}
+
+.sidebar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 12px 12px;
+  border-bottom: 1px solid #f0f0f0;
+  margin-bottom: 8px;
+}
+
+.sidebar-header h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #333;
+}
+
+/* 分类列表 */
+.category-list {
+  padding: 4px 0;
+}
+
+.category-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: background 0.15s;
+  font-size: 13px;
+  color: #555;
+}
+
+.category-item:hover {
+  background: #f5f5f5;
+}
+
+.category-item.active {
+  background: #e6f7ff;
+  color: #1890ff;
+  font-weight: 500;
+}
+
+.category-icon {
+  margin-right: 8px;
+  font-size: 15px;
+}
+
+.category-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.category-count {
+  margin-left: 8px;
+  font-size: 12px;
+  color: #999;
+  background: #f0f0f0;
+  padding: 0 6px;
+  border-radius: 10px;
+  min-width: 20px;
+  text-align: center;
+}
+
+.category-item.active .category-count {
+  background: #bae7ff;
+  color: #1890ff;
+}
+
+/* 标签云 */
+.tag-cloud-section {
+  padding: 12px 12px 0;
+  border-top: 1px solid #f0f0f0;
+  margin-top: 8px;
+}
+
+.tag-cloud-section h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: #666;
+  font-weight: 500;
+}
+
+.tag-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.tag-cloud-item {
+  cursor: pointer;
+  font-size: 12px;
+  margin: 0;
+}
+
+.tag-cloud-item:hover {
+  opacity: 0.8;
+}
+
+.tag-count-badge {
+  margin-left: 2px;
+  font-size: 10px;
+  color: #999;
+}
+
+.clear-tag-btn {
+  padding: 0;
+  height: auto;
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+/* 主内容区 */
 .inbox-container {
+  flex: 1;
   padding: 20px;
   max-width: 900px;
-  margin: 0 auto;
+  min-width: 0;
 }
 
 .inbox-header {
@@ -587,6 +876,22 @@ onUnmounted(() => {
 .inbox-header h2 {
   margin: 0;
   font-size: 20px;
+}
+
+/* 当前筛选提示 */
+.active-filters {
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: #f0f7ff;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-label {
+  font-size: 13px;
+  color: #666;
 }
 
 .inbox-filters {
@@ -757,6 +1062,14 @@ onUnmounted(() => {
   color: #1890ff;
 }
 
+.clickable-tag {
+  cursor: pointer;
+}
+
+.clickable-tag:hover {
+  opacity: 0.7;
+}
+
 .message-card-body {
   cursor: pointer;
 }
@@ -851,6 +1164,47 @@ onUnmounted(() => {
 
 /* 移动端适配 */
 @media (max-width: 768px) {
+  .inbox-layout {
+    flex-direction: column;
+  }
+
+  .category-sidebar {
+    width: 100% !important;
+    min-width: 0 !important;
+    border-right: none;
+    border-bottom: 1px solid #f0f0f0;
+    max-height: none;
+    padding: 12px 0;
+  }
+
+  .category-sidebar.sidebar-collapsed {
+    width: 100% !important;
+    min-width: 0 !important;
+    padding: 8px 4px;
+  }
+
+  .category-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 4px 12px;
+  }
+
+  .category-item {
+    padding: 4px 10px;
+    border-radius: 16px;
+    background: #f5f5f5;
+    font-size: 12px;
+  }
+
+  .category-item.active {
+    background: #e6f7ff;
+  }
+
+  .tag-cloud-section {
+    padding: 8px 12px 0;
+  }
+
   .inbox-container {
     padding: 12px;
   }

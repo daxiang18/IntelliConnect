@@ -339,18 +339,24 @@ function getCurrentKnowledgeGraphic() {
   if (!currentProductId.value) return
   if (chart.value) chart.value.showLoading()
   showNodeInfo.value = false
-  queryKnowledgeGraphic({ productId: currentProductId.value }).then((res) => {
-    const { data, errorCode } = res.data
-    if (errorCode === 2001) {
-      router.push('/login')
-      return
-    }
-    if (errorCode === 200) {
+  queryKnowledgeGraphic({ productId: currentProductId.value })
+    .then((res) => {
+      const { data, errorCode } = res.data
+      if (errorCode === 2001) {
+        router.push('/login')
+        return
+      }
+      if (errorCode === 200) {
+        graphic.value = data
+        updateGraphicData()
+      }
+    })
+    .catch((err) => {
+      console.error('Failed to load knowledge graphic:', err)
+    })
+    .finally(() => {
       if (chart.value) chart.value.hideLoading()
-      graphic.value = data
-      updateGraphicData()
-    }
-  })
+    })
 }
 
 function handleNodeClick(params) {
@@ -425,11 +431,9 @@ function refreshChartHandler(option) {
 
 function initializeCanvas() {
   if (cavDom.value) {
-    // Set cav size to parent size
+    // Read initial size from parent
     const W = cavDom.value.offsetParent.offsetWidth
     const H = cavDom.value.offsetParent.offsetHeight
-    cavDom.value.width = W
-    cavDom.value.height = H
     cavWidth.value = W
     cavHeight.value = H
 
@@ -437,13 +441,12 @@ function initializeCanvas() {
       for (const entry of entries) {
         const newW = entry.target.offsetWidth
         const newH = entry.target.offsetHeight
-        cavDom.value.width = newW
-        cavDom.value.height = newH
         cavWidth.value = newW
         cavHeight.value = newH
 
-        updateGraphicData()
-        // refreshChartHandler(option);
+        if (chart.value) {
+          chart.value.resize()
+        }
       }
     })
     resizeObserver.value.observe(cavDom.value.offsetParent)
@@ -607,7 +610,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  resizeObserver.value.disconnect()
+  if (resizeObserver.value) resizeObserver.value.disconnect()
   removeGlobalEvent()
 })
 </script>
@@ -676,7 +679,7 @@ onUnmounted(() => {
         </div>
       </div>
       <div class="kg-body">
-        <canvas id="kg-cav" ref="cavDom">Your browser didn't support canvas.</canvas>
+        <div id="kg-cav" ref="cavDom" style="width:100%;height:100%;"></div>
       </div>
     </div>
     <Modal

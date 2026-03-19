@@ -126,7 +126,7 @@ public class InputController {
     return inputMessageService.promoteMessageToLongMemory(id, inputMessagePromoteParam, header);
   }
 
-  @Operation(summary = "收件箱消息列表", description = "分页查询当前用户所有输入消息，支持按来源类型、状态、内容类型、关键词、日期范围、文档用途筛选")
+  @Operation(summary = "收件箱消息列表", description = "分页查询当前用户所有输入消息，支持按来源类型、状态、内容类型、关键词、日期范围、文档用途、内容分类、标签筛选")
   @RequestMapping(value = "/messages", method = RequestMethod.GET)
   public JsonResult<?> listMessages(
       @RequestParam(value = "sourceType", required = false) String sourceType,
@@ -137,17 +137,25 @@ public class InputController {
       @RequestParam(value = "startTime", required = false) Long startTime,
       @RequestParam(value = "endTime", required = false) Long endTime,
       @RequestParam(value = "documentPurpose", required = false) String documentPurpose,
+      @RequestParam(value = "contentCategory", required = false) String contentCategory,
+      @RequestParam(value = "contentTag", required = false) String contentTag,
       @RequestParam(value = "page", required = false) Integer page,
       @RequestParam(value = "size", required = false) Integer size,
       @RequestHeader("Authorization") String header) {
     return inputMessageService.listMessages(sourceType, status, contentType, keyword, archived,
-        startTime, endTime, documentPurpose, page, size, header);
+        startTime, endTime, documentPurpose, contentCategory, contentTag, page, size, header);
   }
 
   @Operation(summary = "消息统计", description = "按状态和来源类型分组统计当前用户消息数量")
   @RequestMapping(value = "/messages/stats", method = RequestMethod.GET)
   public JsonResult<?> getMessageStats(@RequestHeader("Authorization") String header) {
     return inputMessageService.getMessageStats(header);
+  }
+
+  @Operation(summary = "分类统计", description = "按内容分类和标签分组统计当前用户消息，用于分类侧边栏和标签云")
+  @RequestMapping(value = "/messages/categories", method = RequestMethod.GET)
+  public JsonResult<?> getCategoryStats(@RequestHeader("Authorization") String header) {
+    return inputMessageService.getCategoryStats(header);
   }
 
   @Operation(summary = "查询单条消息详情", description = "按 ID 查询当前用户的单条输入消息完整信息")

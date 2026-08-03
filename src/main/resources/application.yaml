@@ -178,10 +178,19 @@ ai:
     timeout: 60
     timeoutRealtime: 120
   asr:
-    provider: funasr # dashscope 或 funasr
+    provider: funasr # dashscope 或 funasr 或 volcano
     wx_smart_robot_asr: dashscope
     dashscope-max-concurrent: 20
     dashscope-acquire-timeout-ms: 30000
+  volcano:
+    asr:
+      # 火山引擎控制台（豆包语音）获取的 APP ID 与 Access Token
+      app-id: XXX
+      access-token: XXX
+      # 录音文件识别极速版资源ID，需在控制台开通 volc.bigasr.auc_turbo 权限
+      resource-id: volc.bigasr.auc_turbo
+      # 是否启用标点
+      enable-punc: true
   minimax:
     api-key: XXX
     group-id: XXX

@@ -40,6 +40,9 @@ public class AsrServiceFactory {
   @Autowired
   private FunAsrClient funAsrClient;
 
+  @Autowired
+  private VolcanoAsrService volcanoAsrService;
+
   /**
    * 获取默认的ASR服务
    */
@@ -50,7 +53,7 @@ public class AsrServiceFactory {
   /**
    * 根据提供商名称获取ASR服务
    *
-   * @param provider 提供商名称（dashscope/funasr），为null时使用默认配置
+   * @param provider 提供商名称（dashscope/funasr/volcano），为null时使用默认配置
    * @return ASR服务实例
    */
   public AsrService getService(String provider) {
@@ -64,8 +67,17 @@ public class AsrServiceFactory {
     if ("dashscope".equalsIgnoreCase(provider)) {
       return audio2Text;
     }
+    if ("volcano".equalsIgnoreCase(provider)) {
+      return volcanoAsrService;
+    }
     log.warn("未知的ASR提供商: {}, 使用默认服务", provider);
-    return "funasr".equalsIgnoreCase(defaultProvider) ? funAsrClient : audio2Text;
+    if ("funasr".equalsIgnoreCase(defaultProvider)) {
+      return funAsrClient;
+    }
+    if ("volcano".equalsIgnoreCase(defaultProvider)) {
+      return volcanoAsrService;
+    }
+    return audio2Text;
   }
 
 }

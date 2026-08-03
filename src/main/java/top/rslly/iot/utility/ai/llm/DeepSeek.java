@@ -315,7 +315,7 @@ public class DeepSeek implements LLM {
         builder.putAdditionalBodyProperty("enable_thinking", JsonValue.from(true));
         builder.putAdditionalBodyProperty("thinking_budget", JsonValue.from(thinkingBudget));
       }
-    } else if (isOfficialDeepSeekProvider()) {
+    } else if (isOfficialDeepSeekProvider() || isMiniMaxProvider()) {
       builder.putAdditionalBodyProperty("thinking", thinkingMode("disabled"));
     } else if (shouldDisableThinkingByDefault()) {
       builder.putAdditionalBodyProperty("enable_thinking", JsonValue.from(false));
@@ -327,6 +327,15 @@ public class DeepSeek implements LLM {
     try {
       String host = URI.create(baseUrl).getHost();
       return "api.deepseek.com".equals(host == null ? "" : host.toLowerCase(Locale.ROOT));
+    } catch (IllegalArgumentException e) {
+      return false;
+    }
+  }
+
+  private boolean isMiniMaxProvider() {
+    try {
+      String host = URI.create(baseUrl).getHost();
+      return host != null && host.toLowerCase(Locale.ROOT).endsWith("minimaxi.com");
     } catch (IllegalArgumentException e) {
       return false;
     }

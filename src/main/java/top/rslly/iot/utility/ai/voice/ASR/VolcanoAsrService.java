@@ -32,6 +32,8 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.Base64;
@@ -105,15 +107,14 @@ public class VolcanoAsrService implements AsrService {
     try {
       byte[] audioBytes = Files.readAllBytes(file.toPath());
       ObjectNode audio = objectMapper.createObjectNode();
-      audio.put("data", Base64.getEncoder().encodeToString(audioBytes));
-      // 小智链路传入的是 Opus 解码后的裸 PCM（16bit 单声道），对应火山的 raw 格式
-      if ("pcm".equalsIgnoreCase(format)) {
-        audio.put("format", "raw");
-        audio.put("codec", "raw");
-        audio.put("rate", sampleRate);
-        audio.put("bits", 16);
-        audio.put("channel", 1);
+      // 小智链路传入的是 Opus 解码后的裸 PCM（16bit 单声道）。实测极速版对裸 raw
+      // 返回 11103 audio convert failed，须包 44 字节 WAV 头后以 wav 格式提交
+      if ("pcm".equalsIgnoreCase(format) || "raw".equalsIgnoreCase(format)) {
+        audio.put("data",
+            Base64.getEncoder().encodeToString(wrapPcmAsWav(audioBytes, sampleRate)));
+        audio.put("format", "wav");
       } else {
+        audio.put("data", Base64.getEncoder().encodeToString(audioBytes));
         audio.put("format", normalizeFormat(format));
         audio.put("rate", sampleRate);
       }
@@ -182,6 +183,29 @@ public class VolcanoAsrService implements AsrService {
     } finally {
       connection.disconnect();
     }
+  }
+
+  /**
+   * 给 16bit 单声道裸 PCM 加标准 44 字节 WAV 头。
+   */
+  private byte[] wrapPcmAsWav(byte[] pcm, int sampleRate) {
+    int dataSize = pcm.length;
+    ByteBuffer buffer = ByteBuffer.allocate(44 + dataSize).order(ByteOrder.LITTLE_ENDIAN);
+    buffer.put("RIFF".getBytes(StandardCharsets.US_ASCII));
+    buffer.putInt(36 + dataSize);
+    buffer.put("WAVE".getBytes(StandardCharsets.US_ASCII));
+    buffer.put("fmt ".getBytes(StandardCharsets.US_ASCII));
+    buffer.putInt(16);
+    buffer.putShort((short) 1);
+    buffer.putShort((short) 1);
+    buffer.putInt(sampleRate);
+    buffer.putInt(sampleRate * 2);
+    buffer.putShort((short) 2);
+    buffer.putShort((short) 16);
+    buffer.put("data".getBytes(StandardCharsets.US_ASCII));
+    buffer.putInt(dataSize);
+    buffer.put(pcm);
+    return buffer.array();
   }
 
   private String readBody(InputStream inputStream) throws Exception {

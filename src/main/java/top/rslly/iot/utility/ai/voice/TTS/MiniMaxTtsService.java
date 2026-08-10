@@ -115,7 +115,12 @@ public class MiniMaxTtsService implements TtsService {
 
     try {
       // 构建 API URL
-      String url = API_URL + "?GroupId=" + URLEncoder.encode(groupId, StandardCharsets.UTF_8);
+      // 注意：GroupId 为空时绝不能拼 "?GroupId="——MiniMax 对空 GroupId 不报错，
+      // 而是静默返回 0 字节音频（实测：带空参 0 字节 / 不带参 12201 字节）。
+      // 走 TokenPlan 套餐的 key 本就不需要 GroupId。
+      String url = (groupId == null || groupId.isBlank())
+          ? API_URL
+          : API_URL + "?GroupId=" + URLEncoder.encode(groupId, StandardCharsets.UTF_8);
 
       // 构建 JSON 请求体
       int outboundSampleRate = AudioFrameDuration.resolveOutboundSampleRate(chatId);

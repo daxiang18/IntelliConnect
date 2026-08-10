@@ -656,6 +656,8 @@ public class XiaoZhiUtil {
     var emotionRes = emotionToolAsync.run(voiceContent, emotionMessage);
     // 结果字符串构造器
     StringBuilder answerStrBuffer = new StringBuilder();
+    // 推理模型的 <think> 独白跨分片到达，需按流过滤，否则设备会念出内心戏
+    var thinkFilter = new top.rslly.iot.utility.ai.ThinkStreamFilter();
     boolean emotionFlag = false;
     this.sendTTSStart(chatId, generation);
     // 设置处理状态为true
@@ -708,6 +710,8 @@ public class XiaoZhiUtil {
         continue;
       }
       if (element.equals(SSE_DONE_FLAG)) {
+        // 收尾：把过滤器里残留的安全文本补进缓冲
+        answerStrBuffer.append(thinkFilter.flush());
         // 已经抵达最后一帧
         if (!answerStrBuffer.isEmpty()) {
           // 将之前累计的元素入队并交由转化线程处理，
@@ -732,6 +736,11 @@ public class XiaoZhiUtil {
         // 随后清空字符串构造器，将标点之后的部分存入构造器；如果不存在，则将整个元素
         // 加入构造器
         element = element.replace("\n", "");
+        // 过滤推理模型的思考块（跨分片状态机）；整片都是独白时直接丢弃
+        element = thinkFilter.feed(element);
+        if (element.isEmpty()) {
+          continue;
+        }
         // 跳过工具前缀，直接发送文本但不进行TTS
         // trim后检查，如果匹配，跳过处理（原元素包含空格仍然需要发送原内容）
         if (shouldSkipTts(element.trim(), skipToolPrefix)) {
@@ -1004,6 +1013,12 @@ public class XiaoZhiUtil {
       throws IOException {
     if (answer == null || chatId == null) {
       log.error("splitSentences参数错误: answer={}, chatId={}", answer, chatId);
+      return;
+    }
+    // 兜底：推理模型可能把 <think>内心独白</think> 混在正文里，
+    // 设备会把整段念出来，进 TTS 前必须清掉
+    answer = top.rslly.iot.utility.ai.llm.DeepSeek.stripThinkBlocks(answer);
+    if (answer.isBlank()) {
       return;
     }
 

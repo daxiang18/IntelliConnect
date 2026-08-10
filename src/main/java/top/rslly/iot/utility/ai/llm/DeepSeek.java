@@ -438,7 +438,7 @@ public class DeepSeek implements LLM {
    * 自行输出 &lt;think&gt;...&lt;/think&gt;。这段内容属于内部独白，绝不能进入对用户的回复
    * （语音设备会把它整段念出来）。未闭合的残留开标签一并截断。
    */
-  static String stripThinkBlocks(String text) {
+  public static String stripThinkBlocks(String text) {
     if (text == null || text.isEmpty() || !text.contains("<think")) {
       return text;
     }

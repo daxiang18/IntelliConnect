@@ -3,11 +3,12 @@
     <div class="login-box">
       <div class="login-left">
         <div class="platform-title">
-          <div class="title-line">创万联</div>
-          <div class="title-line">InteliConnect</div>
-          <div class="title-line">物联网平台</div>
+          <div class="title-line">平头AI</div>
+          <div class="title-line">pingtouai.com</div>
+          <div class="title-line">AI 灵宠平台</div>
         </div>
 
+        <img src="../../assets/brand-badger.png" class="brand-badger" alt="平头AI" />
       </div>
       <div class="login-form">
         <h2 class="welcome-text">欢迎回来</h2>
@@ -79,6 +80,21 @@
   display: flex;
   align-items: center;
   justify-content: center;
+
+  .brand-badger {
+    width: 210px;
+    height: 210px;
+    max-width: 60%;
+    object-fit: contain;
+    margin-top: 60px;
+    user-select: none;
+    -webkit-user-drag: none;
+    transition: transform 0.4s ease;
+
+    &:hover {
+      transform: scale(1.04);
+    }
+  }
 
   .platform-title {
     position: absolute;

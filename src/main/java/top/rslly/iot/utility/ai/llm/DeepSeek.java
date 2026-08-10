@@ -65,6 +65,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Pattern;
 
 @Slf4j
 public class DeepSeek implements LLM {
@@ -73,6 +74,9 @@ public class DeepSeek implements LLM {
   private static final String FALLBACK_MESSAGE =
       "抱歉，当前服务器繁忙";
   private static final String DONE_SIGNAL = "[DONE]";
+  /** 推理模型内联思考块（跨行），如 MiniMax M 系列的 &lt;think&gt;...&lt;/think&gt; */
+  private static final Pattern THINK_BLOCK =
+      Pattern.compile("(?is)<think>.*?</think>\\s*");
   private static final ExecutorService STREAM_EXECUTOR =
       Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name("deepseek-stream-", 0).factory());
 
@@ -197,7 +201,7 @@ public class DeepSeek implements LLM {
           handler.onToolCall(toolCall.id, toolCall.functionName.toString(),
               toolCall.arguments.toString(), reasoningBuilder.toString());
         } else {
-          handler.onDirectReplyComplete(replyBuilder.toString());
+          handler.onDirectReplyComplete(stripThinkBlocks(replyBuilder.toString()));
         }
       } catch (Exception e) {
         log.error("stream function calling error", e);
@@ -422,9 +426,28 @@ public class DeepSeek implements LLM {
               log.info("model reasoningContent:{}", reasoning);
             }
           }
-          return choice.message().content().orElse("");
+          return stripThinkBlocks(choice.message().content().orElse(""));
         })
         .orElse("");
+  }
+
+  /**
+   * 剥离推理模型内联在正文里的思考块。
+   * <p>
+   * MiniMax M 系列 / DeepSeek-R1 等推理模型即便请求带 thinking=disabled，仍可能在 content 中
+   * 自行输出 &lt;think&gt;...&lt;/think&gt;。这段内容属于内部独白，绝不能进入对用户的回复
+   * （语音设备会把它整段念出来）。未闭合的残留开标签一并截断。
+   */
+  static String stripThinkBlocks(String text) {
+    if (text == null || text.isEmpty() || !text.contains("<think")) {
+      return text;
+    }
+    String cleaned = THINK_BLOCK.matcher(text).replaceAll("");
+    int dangling = cleaned.indexOf("<think");
+    if (dangling >= 0) {
+      cleaned = cleaned.substring(0, dangling);
+    }
+    return cleaned.strip();
   }
 
   private FunctionResult toFunctionResult(ChatCompletion completion) {
@@ -437,7 +460,8 @@ public class DeepSeek implements LLM {
           if (!toolCalls.isEmpty()) {
             return toToolCallResult(toolCalls.get(0), reasoningContent);
           }
-          return FunctionResult.directReply(choice.message().content().orElse(""));
+          return FunctionResult
+              .directReply(stripThinkBlocks(choice.message().content().orElse("")));
         })
         .orElse(FunctionResult.error(FALLBACK_MESSAGE));
   }

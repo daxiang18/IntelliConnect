@@ -681,6 +681,9 @@ public class XiaoZhiUtil {
         try {
           Map<String, String> emotionResult = emotionRes.get();
           if (emotionResult != null && !StringUtils.isEmpty(emotionResult.get("text"))) {
+            // 把本轮情绪同时交给 TTS，让语音带上喜怒哀乐（原先只用于下发表情）
+            top.rslly.iot.utility.ai.voice.TTS.TtsEmotionContext.put(chatId,
+                emotionResult.get("text"));
             JSONObject emotionObject = new JSONObject();
             emotionObject.put("type", "llm");
             emotionObject.put("text", emotionResult.get("emoji"));

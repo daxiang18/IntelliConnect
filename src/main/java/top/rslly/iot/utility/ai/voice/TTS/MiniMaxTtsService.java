@@ -124,7 +124,8 @@ public class MiniMaxTtsService implements TtsService {
 
       // 构建 JSON 请求体
       int outboundSampleRate = AudioFrameDuration.resolveOutboundSampleRate(chatId);
-      String requestBody = buildRequestBody(text, pitch, speed, voice, true, outboundSampleRate);
+      String requestBody =
+          buildRequestBody(text, pitch, speed, voice, true, outboundSampleRate, chatId);
 
       // 发送请求
       URL apiUrl = new URL(url);
@@ -256,7 +257,7 @@ public class MiniMaxTtsService implements TtsService {
    * 构建 MiniMax TTS API 请求体
    */
   private String buildRequestBody(String text, Float pitch, Float speed, String voice,
-      boolean stream, int targetSampleRate) {
+      boolean stream, int targetSampleRate, String chatId) {
     try {
       StringBuilder json = new StringBuilder();
       json.append("{");
@@ -302,6 +303,12 @@ public class MiniMaxTtsService implements TtsService {
         pitchValue = Math.max(-12, Math.min(12, pitchValue));
       }
       json.append("\"pitch\":").append(pitchValue);
+      // 情绪：由 EmotionTool 判定后经 TtsEmotionContext 传入，让语音有起伏而非平读。
+      // MiniMax 只认 8 个值，未命中时不带该字段（带非法值会整单 2013 报错）。
+      String emotion = TtsEmotionContext.get(chatId);
+      if (emotion != null && !emotion.isBlank()) {
+        json.append(",\"emotion\":\"").append(emotion).append("\"");
+      }
       json.append("}");
 
       json.append("}");

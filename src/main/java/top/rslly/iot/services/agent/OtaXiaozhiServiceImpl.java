@@ -296,7 +296,10 @@ public class OtaXiaozhiServiceImpl implements OtaXiaozhiService {
       response.put("websocket", websocket);
 
       // activation info if not yet activated
-      if (otaXiaozhiEntityList.isEmpty() && (version.equals("2") || version.equals("2.0.0"))) {
+      // 只要是 v2 协议族就下发激活码。原先硬编码枚举 "2"/"2.0.0"，
+      // 遇到把固件/应用版本号塞进该 header 的客户端（如 py-xiaozhi 发 "2.1.1"）
+      // 会既不下发激活码、又停在 register 通道，表现为"设备已授权却连不上产品"。
+      if (otaXiaozhiEntityList.isEmpty() && version.trim().startsWith("2")) {
         RandomGenerator randomGenerator = new RandomGenerator("0123456789", 6);
         String code = randomGenerator.generate();
         redisUtil.set(code, deviceId, 60 * 5);

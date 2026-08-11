@@ -38,7 +38,9 @@ public class XiaoZhi {
   @Autowired
   private OtaXiaozhiServiceImpl otaXiaozhiService;
 
-  @RequestMapping(value = "/xiaozhi/ota/", method = RequestMethod.POST,
+  // 同时接受带/不带末尾斜杠：固件 menuconfig 里的 OTA_URL 少写一个 "/" 极常见，
+  // 而失败表现是设备端每 10 秒重试一次 404，排查成本远高于这行改动。
+  @RequestMapping(value = {"/xiaozhi/ota/", "/xiaozhi/ota"}, method = RequestMethod.POST,
       produces = MediaType.APPLICATION_JSON_VALUE)
   public String ota(HttpServletRequest httpServletRequest) {
     return otaXiaozhiService.otaEnable(httpServletRequest);

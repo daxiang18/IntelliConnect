@@ -52,6 +52,9 @@ import java.util.concurrent.LinkedBlockingQueue;
 public class MiniMaxTtsService implements TtsService {
 
   private static final String API_URL = "https://api.minimaxi.com/v1/t2a_v2";
+  /** 直接索要 PCM，避免逐句起 ffmpeg 转码（实测 API 侧也更快：0.39s vs mp3 0.74s） */
+  private static final String RESPONSE_FORMAT = "pcm";
+  private static final String PCM_FORMAT = "pcm";
   private static final String DEFAULT_MODEL = "speech-02-hd";
   private static final String DEFAULT_VOICE = "Chinese (Mandarin)_Warm_Bestie";
   private static final int DEFAULT_MINIMAX_SAMPLE_RATE = 32000;
@@ -200,24 +203,30 @@ public class MiniMaxTtsService implements TtsService {
         }
       }
 
-      // 将音频数据保存为临时 MP3 文件
-      byte[] mp3Data = audioBuffer.toByteArray();
-      if (mp3Data.length == 0) {
+      byte[] audioData = audioBuffer.toByteArray();
+      if (audioData.length == 0) {
         log.warn(
             "MiniMax TTS returned empty audio data for voice: '{}', model: '{}', text length: {}",
             voice, model != null && !model.isBlank() ? model : DEFAULT_MODEL, text.length());
         return null;
       }
-      log.debug("MiniMax TTS generated {} bytes of audio data for voice: '{}'", mp3Data.length,
+      log.debug("MiniMax TTS generated {} bytes of audio data for voice: '{}'", audioData.length,
           voice);
 
-      String outputPath = System.getProperty("java.io.tmpdir");
-      String uuid = UUID.randomUUID().toString();
-      tempFilePath = Paths.get(outputPath, uuid + ".mp3").toString();
-      Files.write(Paths.get(tempFilePath), mp3Data);
-
-      byte[] pcmData = AudioUtils.convertMp3ToPcm(tempFilePath,
-          AudioFrameDuration.resolveOutboundSampleRate(chatId));
+      // 直接向 MiniMax 索要 PCM，省掉「写临时 mp3 → 起 ffmpeg 进程转码 → 读回」这一整套。
+      // 该转码是逐句进行的重量级操作，正是设备端语音断续（产出慢于播放）的主因；
+      // 请求采样率与下行采样率一致，无需再重采样。
+      byte[] pcmData;
+      if (PCM_FORMAT.equals(RESPONSE_FORMAT)) {
+        pcmData = audioData;
+      } else {
+        String outputPath = System.getProperty("java.io.tmpdir");
+        String uuid = UUID.randomUUID().toString();
+        tempFilePath = Paths.get(outputPath, uuid + "." + RESPONSE_FORMAT).toString();
+        Files.write(Paths.get(tempFilePath), audioData);
+        pcmData = AudioUtils.convertMp3ToPcm(tempFilePath,
+            AudioFrameDuration.resolveOutboundSampleRate(chatId));
+      }
 
       // 编码为 Opus 并发送到队列
       List<byte[]> packets = encoder.encodePcmToOpus(pcmData, false);
@@ -284,7 +293,7 @@ public class MiniMaxTtsService implements TtsService {
       json.append("\"audio_setting\":{");
       json.append("\"sample_rate\":").append(minimaxSampleRate).append(",");
       json.append("\"bitrate\":").append(bitrate).append(",");
-      json.append("\"format\":\"mp3\",");
+      json.append("\"format\":\"").append(RESPONSE_FORMAT).append("\",");
       json.append("\"channel\":1");
       json.append("},");
 
